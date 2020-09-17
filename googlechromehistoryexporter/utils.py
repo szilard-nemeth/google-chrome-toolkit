@@ -47,6 +47,14 @@ class FileUtils:
                 raise
         return dirname
 
+    @classmethod
+    def ensure_file_exists_and_readable(cls, file):
+        LOG.info("Trying to open file %s for reading..", file)
+        f = open(file, "r")
+        if not f.readable():
+            raise ValueError("File {} is not readable".format(file))
+        return file
+
 
 class ResultPrinter:
     def __init__(self, data, headers):

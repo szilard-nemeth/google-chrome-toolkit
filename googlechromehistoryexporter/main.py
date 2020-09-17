@@ -1,5 +1,5 @@
 #!/usr/bin/python
-
+__author__ = 'Szilard Nemeth'
 import argparse
 import sys
 import datetime as dt
@@ -17,13 +17,25 @@ from googlechromehistoryexporter.utils import auto_str, FileUtils, ResultPrinter
 LOG = logging.getLogger(__name__)
 PROJECT_NAME = 'gchromehistoryexporter'
 PRINTABLE_FIELD_DISPLAY_NAMES = ["Name", "Link", "Shared with me date", "Owner", "Type"]
-__author__ = 'Szilard Nemeth'
-
+TITLE_MAX_LENGTH = 50
+LINK_MAX_LENGTH = 20
 
 class OperationMode(Enum):
     EXPORT_TEXT = "EXPORT_TEXT"
     EXPORT_CSV = "EXPORT_CSV"
     PRINT = "PRINT"
+
+
+@auto_str
+class ChromeHistoryEntry:
+    def __init__(self, title, url, last_visit_time, visit_count):
+        self.title = title
+        self.url = url
+        self.last_visit_time = last_visit_time
+        self.visit_count = visit_count
+
+    def __repr__(self):
+        return str(self.__dict__)
 
 
 class Setup:
@@ -76,7 +88,7 @@ class Setup:
                             dest='text', default=False,
                             required=False,
                             help='Export entries to a text file separated by newlines.')
-        parser.add_argument('-f', '--db-files', dest="db_files", type=argparse.FileType('r'), nargs='+', required=True)
+        parser.add_argument('-f', '--db-files', dest="db_files", type=FileUtils.ensure_file_exists_and_readable, nargs='+', required=True)
 
         # TODO add parameter that can read multiple db files
 
@@ -135,23 +147,67 @@ class GChromeHistoryExport:
     @staticmethod
     def validate_operation_mode(provided_op_mode):
         valid_op_modes = [e.name for e in OperationMode]
-        if provided_op_mode and provided_op_mode not in valid_op_modes:
+        if provided_op_mode and provided_op_mode.name not in valid_op_modes:
             raise ValueError("Unknown Operation mode, should be any of these: {}".format(valid_op_modes))
         LOG.info("Using operation mode: %s", options.operation_mode)
 
-    def export(self):
-        raw_data_from_api = self.get_data_from_db()
-        # TODO debug log raw data here
-        truncate = self.operation_mode == OperationMode.PRINT
-        self.data = self.convert_data_to_rows(raw_data_from_api, truncate=truncate)
-        self.print_results_table()
+    def query_history_entries(self):
+        result = {}
+        for db_file in self.options.db_files:
+            LOG.info("Using DB file: {}", db_file)
+            self.query_databases(db_file)
+            hist_entries = self.query_data_from_db(db_file)
+            result[db_file] = hist_entries
+        return result
 
-    def get_data_from_db(self):
-        conn = sqlite3.connect('example.db')
+    @staticmethod
+    def query_databases(db_file):
+        conn = sqlite3.connect(db_file)
         c = conn.cursor()
-        timestamp = ('1000000-11644473600',)
-        query = "select datetime(last_visit_time/?,'unixepoch') as 'date', url from urls order by last_visit_time desc"
-        c.execute(query, timestamp)
+        LOG.info("Listing available databases: ")
+        for row in c.execute("SELECT * FROM main.sqlite_master WHERE type='table'"):
+            # TODO list this with tabulate
+            LOG.info(row)
+
+    @staticmethod
+    def query_data_from_db(db_file):
+        ###### TODAY's date: 1600375800 --> seconds since Jan 01 1970. (UTC)
+        # This epoch translates to:
+        # 09/17/2020 @ 8:50pm (UTC)
+        # in microseconds: 1600375800000000
+
+        ###### Magic number used in query: 11644473600 (coming from answer: https://superuser.com/a/602274)
+        # Is equivalent to:
+        # 01/01/2339 @ 12:00am (UTC)
+
+        ###### MEANING OF THIS MAGIC NUMBER: 11644473600
+        # Answer: https://stackoverflow.com/a/6161842/1106893
+        # It's quite simple: the windows epoch starts 1601-01-01T00:00:00Z.
+        # It's 11644473600 seconds before the UNIX/Linux epoch (1970-01-01T00:00:00Z).
+        # The Windows ticks are in 100 nanoseconds.
+        # Thus, a function to get seconds from the UNIX epoch will be as follows:
+        # ...
+
+        # Another good explanation is here: https://stackoverflow.com/a/26233663/1106893
+
+        ###### Other useful answers:
+        # 1. https://stackoverflow.com/a/26118615/1106893
+        # The answer is given in this question: "[Google Chrome's] timestamp is formatted
+        # as the number of microseconds since January, 1601"
+
+        # 1. https://stackoverflow.com/a/2197334/1106893
+        # datetime.datetime(1601, 1, 1) + datetime.timedelta(microseconds=<number of microseconds>)
+        def _convert_chrome_datetime(microseconds):
+            return datetime.datetime(1601, 1, 1) + datetime.timedelta(microseconds=microseconds)
+
+        conn = sqlite3.connect(db_file)
+        c = conn.cursor()
+        query = "select title, url, last_visit_time, visit_count from urls order by last_visit_time desc"
+        c.execute(query)
+        results = c.fetchall()
+        result_objs = [ChromeHistoryEntry(r[0], r[1], _convert_chrome_datetime(r[2]), r[3]) for r in results]
+        #LOG.debug("Results: " + str(result_objs))
+        return result_objs
 
     def print_results_table(self):
         if not self.data:
@@ -159,9 +215,8 @@ class GChromeHistoryExport:
         result_printer = ResultPrinter(self.data, self.headers)
         result_printer.print_table()
 
-    def convert_data_to_rows(self, data, truncate=False):
-        TITLE_MAX_LENGTH = 50
-        LINK_MAX_LENGTH = 20
+    @staticmethod
+    def convert_data_to_rows(data, truncate=False):
         converted_data = []
         truncate_links = truncate
         truncate_titles = truncate
@@ -202,7 +257,6 @@ class GChromeHistoryExport:
         return converted_data
 
 
-
 if __name__ == '__main__':
     start_time = time.time()
 
@@ -214,6 +268,13 @@ if __name__ == '__main__':
     Setup.init_logger(gchrome_export.log_dir, console_debug=options.verbose)
 
     # Start exporting
-    gchrome_export.export()
+    gchrome_export.query_history_entries()
+
+    # TODO
+    #truncate = self.options.operation_mode == OperationMode.PRINT
+    # self.data = self.convert_data_to_rows(db_data, truncate=truncate)
+    # self.print_results_table()
+
+
     end_time = time.time()
     LOG.info("Execution of script took %d seconds", end_time - start_time)
