@@ -1,60 +1,125 @@
 import datetime
 import logging
+from enum import Enum
 
 from tabulate import tabulate
 
+from googlechromehistoryexporter.utils import FileUtils
+
 LOG = logging.getLogger(__name__)
-PRINTABLE_FIELD_DISPLAY_NAMES = ["Name", "Link", "Shared with me date", "Owner", "Type"]
-TITLE_MAX_LENGTH = 50
-LINK_MAX_LENGTH = 20
 
 
-def convert_data_to_rows(data, truncate=False):
-    converted_data = []
-    truncate_links = truncate
-    truncate_titles = truncate
-    truncate_dates = truncate
+class Field(Enum):
+    """
+    Display name, key, type, max length
+    """
+    TITLE = "Title", 'title', str, 70
+    URL = "URL", 'url', str, 100
+    LAST_VISIT_TIME = "Last visit time", 'last_visit_time', 'datetime', -1
+    VISIT_COUNT = "Visit count", "visit_count", int, -1
 
-    row_stats = RowStats(["name", "link", "date", "owners", "type"], track_unique=["type"])
-    for f in data:
-        name = str(f.name)
-        link = str(f.link)
-        date = str(f.shared_with_me_date)
-        owners = ",".join([o.name for o in f.owners])
-        # mimetype = self._convert_mime_type(str(f.mime_type))
+    def get_key(self):
+        return self.value[1]
 
-        row_stats.update({"name": name, "link": link, "date": date, "owners": owners, "type": mimetype})
+    def get_type(self):
+        return self.value[2]
 
-        if truncate_titles and len(name) > TITLE_MAX_LENGTH:
-            original_name = name
-            name = name[0:TITLE_MAX_LENGTH] + "..."
-            LOG.debug("Truncated title: '%s', original length: %d, new length: %d",
-                      original_name, len(original_name), TITLE_MAX_LENGTH)
-
-        if truncate_links:
-            original_link = link
-            link = link[0:LINK_MAX_LENGTH]
-            LOG.debug("Truncated link: '%s', original length: %d, new length: %d",
-                      original_link, len(original_link), LINK_MAX_LENGTH)
-
-        if truncate_dates:
-            original_date = date
-            date_obj = datetime.datetime.strptime(date, '%Y-%m-%dT%H:%M:%S.%fZ')
-            date = date_obj.strftime("%Y-%m-%d")
-            LOG.debug("Truncated date: '%s', original value: %s, new value: %s",
-                      original_date, original_date, date)
-
-        row = [name, link, date, owners, mimetype]
-        converted_data.append(row)
-    row_stats.print_stats()
-    return converted_data
+    def get_max_length(self):
+        return self.value[3]
 
 
-def print_results_table(self):
-    if not self.data:
-        raise ValueError("Data is not yet set, please call sync method first!")
-    result_printer = ResultPrinter(self.data, self.headers)
-    result_printer.print_table()
+class DataConverter:
+    def __init__(self, src_data, headers, row_stats, truncate_dict, order_by, order_mode, add_row_numbers=False):
+        self.src_data = src_data
+        self.headers = headers
+        self.row_stats = row_stats
+        self.truncate_dict = truncate_dict
+        self.order_by = order_by.get_key()
+        self.order_mode = order_mode
+        self.add_row_numbers = add_row_numbers
+
+    @staticmethod
+    def _modify_dict_value(row_dict, key, value, new_value):
+        if value != new_value:
+            row_dict[key] = new_value
+
+    def convert(self):
+        if self.order_by:
+            LOG.info("Ordering data by field '%s', mode: %s", self.order_by, self.order_mode)
+            reverse = False if self.order_mode == "ASC" else True
+            self.src_data = sorted(self.src_data, key=lambda data: getattr(data, self.order_by), reverse=reverse)
+
+        converted_data = []
+        row_number = 1
+        for d in self.src_data:
+            row_dict = {header: getattr(d, header.get_key()) for header in self.headers}
+
+            # Convert all fields to str
+            for k, v in row_dict.items():
+                row_dict[k] = str(v)
+
+            # Update row stats
+            self.row_stats.update(row_dict)
+
+            # Apply truncates
+            for field, value in row_dict.items():
+                mod_val = self.convert_str_field(field, value)
+                self._modify_dict_value(row_dict, field, value, mod_val)
+                mod_val = self.convert_datetime_field(field, value)
+                self._modify_dict_value(row_dict, field, value, mod_val)
+
+            # Make row
+            row = []
+            if self.add_row_numbers:
+                row.append(str(row_number))
+            for field in self.headers:
+                row.append(row_dict[field])
+
+            converted_data.append(row)
+            row_number += 1
+
+        if self.add_row_numbers:
+            self.headers.insert(0, "Row #")
+        self.row_stats.print_stats()
+        return converted_data
+
+    def convert_str_field(self, field, value):
+        truncate = self.truncate_dict[field]
+        max_len = field.get_max_length()
+        if truncate and field.get_type() == str and len(value) > max_len:
+            orig_value = value
+            mod_value = value[0:max_len] + "..."
+            LOG.debug("Truncated %s: '%s', "
+                      "original length: %d, new length: %d", field, orig_value, len(orig_value), max_len)
+            return mod_value
+        return value
+
+    def convert_datetime_field(self, field, value):
+        truncate = self.truncate_dict[field]
+        if truncate and field.get_type() == 'datetime':
+            orig_date = value
+            date_obj = datetime.datetime.strptime(orig_date, '%Y-%m-%d %H:%M:%S.%f')
+            mod_date = date_obj.strftime("%Y-%m-%d")
+            LOG.debug("Truncated date: '%s', original value: %s, new value: %s", orig_date, orig_date, mod_date)
+            return mod_date
+        return value
+
+
+class ResultPrinter:
+    @staticmethod
+    def print_table(converter):
+        converted_data = converter.convert()
+        LOG.info("Printing result table: \n%s", tabulate(converted_data, converter.headers, tablefmt="fancy_grid"))
+
+    @staticmethod
+    def print_table_html(converter, to_file=None):
+        converted_data = converter.convert()
+        tabulated = tabulate(converted_data, converter.headers, tablefmt="html")
+        if to_file:
+            LOG.info("Writing results to file: " + to_file)
+            FileUtils.write_to_file(to_file, tabulated)
+        else:
+            LOG.info("Printing result table: \n%s", tabulated)
 
 
 class RowStats:
@@ -92,26 +157,14 @@ class RowStats:
             self.longest_fields[field_name] = field_value
 
     def print_stats(self):
-        LOG.info("Longest line is: '%s' (%d characters)", self.longest_line, len(self.longest_line))
+        LOG.debug("Longest line is %d characters long", len(self.longest_line))
         for field_name in self.track_unique_values:
             self._print(field_name)
 
         if len(self.unique_values) > 0:
             for field_name, values_set in self.unique_values.items():
-                LOG.info("Unique values of field '%s': %s", field_name, ",".join(values_set))
+                LOG.info("Number of unique values of field '%s': %d", field_name, len(values_set))
 
     def _print(self, field_name):
         field_value = self.longest_fields[field_name]
-        LOG.info("Longest %s is: '%s' (length: %d characters)", field_name, field_value, len(field_value))
-
-
-class ResultPrinter:
-    def __init__(self, data, headers):
-        self.data = data
-        self.headers = headers
-
-    def print_table(self):
-        LOG.info("Printing result table: %s", tabulate(self.data, self.headers, tablefmt="fancy_grid"))
-
-    def print_table_html(self):
-        LOG.info("Printing result table: %s", tabulate(self.data, self.headers, tablefmt="html"))
+        LOG.debug("Longest line is %d characters long. Field name: %s", len(field_value), field_name)

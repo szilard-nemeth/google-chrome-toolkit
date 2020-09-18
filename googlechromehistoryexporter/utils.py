@@ -83,3 +83,9 @@ class FileUtils:
             human_readable_size = humanize.naturalsize(size, gnu=True)
             result += "{size}    {file}\n".format(size=human_readable_size, file=file_path)
         return result
+
+    @classmethod
+    def write_to_file(cls, file_path, data):
+        f = open(file_path, 'w')
+        f.write(data)
+        f.close()

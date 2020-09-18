@@ -1,4 +1,6 @@
 #!/usr/bin/python
+from googlechromehistoryexporter.exporters import DataConverter, Field, RowStats, ResultPrinter
+
 __author__ = 'Szilard Nemeth'
 import argparse
 import sys
@@ -18,6 +20,7 @@ LOG = logging.getLogger(__name__)
 PROJECT_NAME = 'gchromehistoryexporter'
 HISTORY_FILE_NAME = 'History'
 DEFAULT_GOOGLE_CHROME_DIR = expanduser("~") + '/Library/Application Support/Google/Chrome/'
+EXPORTED_DIR_NAME = "exported-chrome-db"
 
 
 class OperationMode(Enum):
@@ -72,6 +75,8 @@ class Setup:
         """This function parses and return arguments passed in"""
 
         parser = argparse.ArgumentParser()
+        # TODO make --db-files and --lookup-db-files mutually exclusive
+        # TODO add argument - profile: Only export one DB for a profile
 
         parser.add_argument('-v', '--verbose', action='store_true',
                             dest='verbose', default=None, required=False,
@@ -88,22 +93,23 @@ class Setup:
                             dest='text', default=False,
                             required=False,
                             help='Export entries to a text file separated by newlines.')
+        parser.add_argument('--html', action='store_true',
+                            dest='html', default=False,
+                            required=False,
+                            help='Export entries to a HTML file.')
 
-        # TODO make --db-files and --lookup-db-files mutually exclusive
-        parser.add_argument('-f', '--db-files', dest="db_files", type=FileUtils.ensure_file_exists_and_readable, nargs='+', required=True)
+        parser.add_argument('-f', '--db-files', dest="db_files", type=FileUtils.ensure_file_exists_and_readable,
+                            nargs='+', required=True)
 
         parser.add_argument('-s', '--search-db-files', action='store_true',
                             dest='search_db_files', default=False,
                             required=False,
-                            help='Whether to search for db files.')
+                            help='Whether to search for DB files.')
         parser.add_argument('-sb', '--search-basedir',
                             type=FileUtils.ensure_dir_created,
                             dest='search_basedir', default=DEFAULT_GOOGLE_CHROME_DIR,
                             required=False,
-                            help='Basedir where this script looks for Google Chrome history db files.')
-
-
-        # TODO add parameter that can read multiple db files
+                            help='Basedir where this script looks for Google Chrome history DB files.')
 
         args = parser.parse_args()
         print("Args: " + str(args))
@@ -177,18 +183,24 @@ class GChromeHistoryExport:
             raise ValueError("Unknown Operation mode, should be any of these: {}".format(valid_op_modes))
         LOG.info("Using operation mode: %s", options.operation_mode)
 
+    @staticmethod
+    def get_profile_from_file_path(src_file, split_filename=True):
+        if split_filename:
+            profile = os.path.dirname(src_file).split('/')[-1]
+        else:
+            profile = os.path.split(src_file)[-1]
+        return profile.replace(" ", "")
+
     def query_history_entries(self):
         def _dst_filename_func(src_file, dest_dir):
             # Profile directory name may contains spaces, e.g. "Profile 1"
-            profile = os.path.dirname(src_file).split('/')[-1]
-            profile = profile.replace(" ", "")
+            profile = GChromeHistoryExport.get_profile_from_file_path(src_file)
             file_name = os.path.basename(src_file)
             return file_name + '-' + profile
 
-
         if self.search_db_files:
             found_db_files = FileUtils.search_files(self.search_basedir, HISTORY_FILE_NAME)
-            LOG.info("Found db files: \n%s", "\n".join(found_db_files))
+            LOG.info("Found DB files: \n%s", "\n".join(found_db_files))
             # EXAMPLE RESULTS
             # /Users/<someuser>/Library/Application Support/Google/Chrome//Profile 1/History
             # /Users/<someuser>/Library/Application Support/Google/Chrome//Default/History
@@ -196,7 +208,7 @@ class GChromeHistoryExport:
             # /Users/<someuser>/Library/Application Support/Google/Chrome//System Profile/History
             # /Users/<someuser>/Library/Application Support/Google/Chrome//Guest Profile/History
             if not found_db_files:
-                raise ValueError("Cannot find any db file under directory: " + self.search_basedir)
+                raise ValueError("Cannot find any DB file under directory: " + self.search_basedir)
 
             # Make a copy of each db file as they might be locked by Chrome
             copied_db_files = [FileUtils.copy_file_to_dir(db, self.db_copies_dir, _dst_filename_func) for db in found_db_files]
@@ -209,7 +221,8 @@ class GChromeHistoryExport:
             LOG.info("Using DB file: %s", db_file)
             self.query_databases(db_file)
             hist_entries = self.query_data_from_db(db_file)
-            result[db_file] = hist_entries
+            key = GChromeHistoryExport.get_profile_from_file_path(db_file, split_filename=False)
+            result[key] = hist_entries
         return result
 
     @staticmethod
@@ -238,8 +251,13 @@ class GChromeHistoryExport:
         c.execute(query)
         results = c.fetchall()
         result_objs = [ChromeHistoryEntry(r[0], r[1], _convert_chrome_datetime(r[2]), r[3]) for r in results]
-        # LOG.debug("Results: " + str(result_objs))
         return result_objs
+
+    def create_new_export_dir(self):
+        now = datetime.datetime.now()
+        dt_string = now.strftime("%Y%m%d_%H%M%S")
+        dirname = FileUtils.ensure_dir_created(os.path.join(self.exports_dir, EXPORTED_DIR_NAME + '-' + dt_string))
+        return dirname
 
 
 if __name__ == '__main__':
@@ -247,18 +265,39 @@ if __name__ == '__main__':
 
     # Parse args
     options = Setup.parse_args_to_options()
-    gchrome_export = GChromeHistoryExport(options)
+    exporter = GChromeHistoryExport(options)
 
     # Initialize logging
-    Setup.init_logger(gchrome_export.log_dir, console_debug=options.verbose)
+    Setup.init_logger(exporter.log_dir, console_debug=options.verbose)
 
     # Start exporting
-    entries_by_db_file = gchrome_export.query_history_entries()
+    entries_by_db_file = exporter.query_history_entries()
 
-    # TODO
-    #truncate = self.options.operation_mode == OperationMode.PRINT
-    # self.data = self.convert_data_to_rows(db_data, truncate=truncate)
-    # self.print_results_table()
+    # TODO control this by CLI argument
+    profile = HISTORY_FILE_NAME + "-Profile1"
+    src_data = entries_by_db_file[profile]
+    all_fields = [f for f in Field]
+
+    should_truncate = exporter.options.operation_mode == OperationMode.PRINT
+    truncate_dict = {}
+    for f in all_fields:
+        if not should_truncate or f.get_type() != str:
+            truncate_dict[f] = False
+        else:
+            truncate_dict[f] = True
+
+    converter = DataConverter(src_data,
+                              [Field.TITLE, Field.URL, Field.LAST_VISIT_TIME, Field.VISIT_COUNT],
+                              RowStats(all_fields, track_unique=[Field.URL]),
+                              truncate_dict,
+                              Field.LAST_VISIT_TIME,
+                              'DESC',
+                              add_row_numbers=True)
+
+    # TODO decide on operation mode
+    # TODO Append a< href> for links if HTML export is on: https://www.w3schools.com/html/html_links.asp
+    export_dir = exporter.create_new_export_dir()
+    ResultPrinter.print_table_html(converter, to_file=export_dir + os.sep + profile + ".html")
 
     end_time = time.time()
     LOG.info("Execution of script took %d seconds", end_time - start_time)
