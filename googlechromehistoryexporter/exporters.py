@@ -128,19 +128,33 @@ class ResultPrinter:
         LOG.info("Printing result table: \n%s", tabulate(converted_data, converter.headers, tablefmt="fancy_grid"))
 
     @staticmethod
-    def print_table_html(converter, to_file=None):
+    def print_table_html(converter, to_file):
         import html
+        FileUtils.ensure_file_exists_and_writable(to_file)
         converted_data = converter.convert()
         tabulated = tabulate(converted_data, converter.headers, tablefmt="html")
 
         # Unescape manually here, as tabulate automatically escapes HTML content and there's no way to turn this off.
         tabulated = html.unescape(tabulated)
 
-        if to_file:
-            LOG.info("Writing results to file: " + to_file)
-            FileUtils.write_to_file(to_file, tabulated)
-        else:
-            LOG.info("Printing result table: \n%s", tabulated)
+        LOG.info("Writing results to file: " + to_file)
+        FileUtils.write_to_file(to_file, tabulated)
+
+    @staticmethod
+    def print_table_csv(converter, to_file):
+        FileUtils.ensure_file_exists_and_writable(to_file)
+        converted_data = converter.convert()
+        tabulated = tabulate(converted_data, converter.headers, tablefmt="csv")
+        LOG.info("Writing results to file: %s", to_file)
+        FileUtils.write_to_file(to_file, tabulated)
+
+    @staticmethod
+    def print_table_fancy_grid(converter, to_file):
+        FileUtils.ensure_file_exists_and_writable(to_file)
+        converted_data = converter.convert()
+        tabulated = tabulate(converted_data, converter.headers, tablefmt="fancy_grid")
+        LOG.info("Writing results to file: %s", to_file)
+        FileUtils.write_to_file(to_file, tabulated)
 
 
 class RowStats:

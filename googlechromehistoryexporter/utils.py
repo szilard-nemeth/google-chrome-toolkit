@@ -57,6 +57,14 @@ class FileUtils:
             raise ValueError("File {} is not readable".format(file))
         return file
 
+    @classmethod
+    def ensure_file_exists_and_writable(cls, file):
+        LOG.info("Trying to open file %s for writing..", file)
+        f = open(file, "w")
+        if not f.writable():
+            raise ValueError("File {} is not readable".format(file))
+        return file
+
     @staticmethod
     def search_files(basedir, filename):
         result = []

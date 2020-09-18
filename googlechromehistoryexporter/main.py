@@ -83,7 +83,8 @@ class Setup:
 
         parser.add_argument('--export-mode',
                             dest='export_mode',
-                            type=str, choices=[mode.value for mode in ExportMode], help='Export mode')
+                            type=str, choices=[mode.value for mode in ExportMode], help='Export mode',
+                            required=True)
 
         parser.add_argument('-f', '--db-files', dest="db_files", type=FileUtils.ensure_file_exists_and_readable,
                             nargs='+', required=True)
@@ -103,20 +104,18 @@ class Setup:
 
         args = parser.parse_args()
         print("Args: " + str(args))
-
-        options = Options(args.export_mode, args.db_files, args.search_db_files, args.search_basedir, args.verbose, args.truncate)
-        return options
+        return Options(args)
 
 
 @auto_str
 class Options:
-    def __init__(self, export_mode, db_files, search_db_files, search_basedir, verbose, truncate):
-        self.export_mode = export_mode
-        self.db_files = db_files
-        self.search_db_files = search_db_files
-        self.search_basedir = search_basedir
-        self.verbose = verbose
-        self.truncate = truncate
+    def __init__(self, args):
+        self.export_mode = ExportMode(args.export_mode)
+        self.db_files = args.db_files
+        self.search_db_files = args.search_db_files
+        self.search_basedir = args.search_basedir
+        self.verbose = args.verbose
+        self.truncate = args.truncate
 
     def __repr__(self):
         return str(self.__dict__)
@@ -264,10 +263,16 @@ if __name__ == '__main__':
                               'DESC',
                               add_row_numbers=True)
 
-    # TODO decide on operation mode
-    # TODO Append a< href> for links if HTML export is on: https://www.w3schools.com/html/html_links.asp
     export_dir = exporter.create_new_export_dir()
-    ResultPrinter.print_table_html(converter, to_file=export_dir + os.sep + profile + ".html")
+    if exporter.options.export_mode == ExportMode.HTML:
+        file = export_dir + os.sep + profile + ".html"
+        ResultPrinter.print_table_html(converter, file)
+    elif exporter.options.export_mode == ExportMode.CSV:
+        file = export_dir + os.sep + profile + ".csv"
+        ResultPrinter.print_table_csv(converter, file)
+    elif exporter.options.export_mode == ExportMode.TEXT:
+        file = export_dir + os.sep + profile + ".txt"
+        ResultPrinter.print_table_fancy_grid(converter, file)
 
     end_time = time.time()
     LOG.info("Execution of script took %d seconds", end_time - start_time)
