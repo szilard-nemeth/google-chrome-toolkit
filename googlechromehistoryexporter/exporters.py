@@ -6,16 +6,24 @@ from tabulate import tabulate
 
 from googlechromehistoryexporter.utils import FileUtils
 
+HEADER_ROW_NUMBER = "Row #"
+
 LOG = logging.getLogger(__name__)
+
+
+class FieldType(Enum):
+    SIMPLE_STR = "simple_str"
+    URL = "url"
+    DATETIME = "datetime"
 
 
 class Field(Enum):
     """
     Display name, key, type, max length
     """
-    TITLE = "Title", 'title', str, 70
-    URL = "URL", 'url', str, 100
-    LAST_VISIT_TIME = "Last visit time", 'last_visit_time', 'datetime', -1
+    TITLE = "Title", 'title', FieldType.SIMPLE_STR, 70
+    URL = "URL", 'url', FieldType.URL, 100
+    LAST_VISIT_TIME = "Last visit time", 'last_visit_time', FieldType.DATETIME, -1
     VISIT_COUNT = "Visit count", "visit_count", int, -1
 
     def get_key(self):
@@ -29,9 +37,10 @@ class Field(Enum):
 
 
 class DataConverter:
-    def __init__(self, src_data, headers, row_stats, truncate_dict, order_by, order_mode, add_row_numbers=False):
+    def __init__(self, src_data, headers, export_mode, row_stats, truncate_dict, order_by, order_mode, add_row_numbers=False):
         self.src_data = src_data
         self.headers = headers
+        self.export_mode = export_mode
         self.row_stats = row_stats
         self.truncate_dict = truncate_dict
         self.order_by = order_by.get_key()
@@ -42,6 +51,10 @@ class DataConverter:
     def _modify_dict_value(row_dict, key, value, new_value):
         if value != new_value:
             row_dict[key] = new_value
+
+    @staticmethod
+    def _make_html_link(url):
+        return "<a href=\"{url}\">{text}</a>".format(url=url, text=url)
 
     def convert(self):
         if self.order_by:
@@ -54,7 +67,7 @@ class DataConverter:
         for d in self.src_data:
             row_dict = {header: getattr(d, header.get_key()) for header in self.headers}
 
-            # Convert all fields to str
+            # Convert all field values to str
             for k, v in row_dict.items():
                 row_dict[k] = str(v)
 
@@ -79,24 +92,27 @@ class DataConverter:
             row_number += 1
 
         if self.add_row_numbers:
-            self.headers.insert(0, "Row #")
+            self.headers.insert(0, HEADER_ROW_NUMBER)
         self.row_stats.print_stats()
         return converted_data
 
     def convert_str_field(self, field, value):
         truncate = self.truncate_dict[field]
         max_len = field.get_max_length()
-        if truncate and field.get_type() == str and len(value) > max_len:
+        allowed_field_types = {FieldType.SIMPLE_STR, FieldType.URL}
+        if truncate and field.get_type() in allowed_field_types and len(value) > max_len:
             orig_value = value
-            mod_value = value[0:max_len] + "..."
+            value = value[0:max_len] + "..."
             LOG.debug("Truncated %s: '%s', "
                       "original length: %d, new length: %d", field, orig_value, len(orig_value), max_len)
-            return mod_value
+
+        if field.get_type() == FieldType.URL:
+            value = self._make_html_link(value)
         return value
 
     def convert_datetime_field(self, field, value):
         truncate = self.truncate_dict[field]
-        if truncate and field.get_type() == 'datetime':
+        if truncate and field.get_type() == FieldType.DATETIME:
             orig_date = value
             date_obj = datetime.datetime.strptime(orig_date, '%Y-%m-%d %H:%M:%S.%f')
             mod_date = date_obj.strftime("%Y-%m-%d")
@@ -113,8 +129,13 @@ class ResultPrinter:
 
     @staticmethod
     def print_table_html(converter, to_file=None):
+        import html
         converted_data = converter.convert()
         tabulated = tabulate(converted_data, converter.headers, tablefmt="html")
+
+        # Unescape manually here, as tabulate automatically escapes HTML content and there's no way to turn this off.
+        tabulated = html.unescape(tabulated)
+
         if to_file:
             LOG.info("Writing results to file: " + to_file)
             FileUtils.write_to_file(to_file, tabulated)

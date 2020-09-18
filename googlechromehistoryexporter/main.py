@@ -1,5 +1,5 @@
 #!/usr/bin/python
-from googlechromehistoryexporter.exporters import DataConverter, Field, RowStats, ResultPrinter
+from googlechromehistoryexporter.exporters import DataConverter, Field, RowStats, ResultPrinter, FieldType
 
 __author__ = 'Szilard Nemeth'
 import argparse
@@ -250,13 +250,14 @@ if __name__ == '__main__':
 
     truncate_dict = {}
     for f in all_fields:
-        if not exporter.options.truncate or f.get_type() != str:
+        if not exporter.options.truncate or f.get_type() in {FieldType.DATETIME}:
             truncate_dict[f] = False
         else:
             truncate_dict[f] = True
 
     converter = DataConverter(src_data,
                               [Field.TITLE, Field.URL, Field.LAST_VISIT_TIME, Field.VISIT_COUNT],
+                              exporter.options.export_mode,
                               RowStats(all_fields, track_unique=[Field.URL]),
                               truncate_dict,
                               Field.LAST_VISIT_TIME,
