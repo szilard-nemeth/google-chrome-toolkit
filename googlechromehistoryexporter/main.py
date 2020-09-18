@@ -1,5 +1,5 @@
 #!/usr/bin/python
-from googlechromehistoryexporter.exporters import DataConverter, Field, RowStats, ResultPrinter, FieldType
+from googlechromehistoryexporter.exporters import DataConverter, Field, RowStats, ResultPrinter, FieldType, Ordering
 
 __author__ = 'Szilard Nemeth'
 import argparse
@@ -21,6 +21,7 @@ PROJECT_NAME = 'gchromehistoryexporter'
 HISTORY_FILE_NAME = 'History'
 DEFAULT_GOOGLE_CHROME_DIR = expanduser("~") + '/Library/Application Support/Google/Chrome/'
 EXPORTED_DIR_NAME = "exported-chrome-db"
+GOOGLE_CHROME_HIST_DB_TEXT = "Google Chrome History DB file"
 
 
 class ExportMode(Enum):
@@ -154,17 +155,17 @@ class GChromeHistoryExport:
         FileUtils.ensure_dir_created(self.search_basedir)
 
     @staticmethod
-    def get_profile_from_file_path(src_file, split_filename=True):
+    def get_profile_from_file_path(src_file, split_filename=True) -> str:
         if split_filename:
-            profile = os.path.dirname(src_file).split('/')[-1]
+            prof = os.path.dirname(src_file).split(os.sep)[-1]
         else:
-            profile = os.path.split(src_file)[-1]
-        return profile.replace(" ", "")
+            prof = os.path.split(src_file)[-1]
+        return prof.replace(" ", "")
 
     def query_history_entries(self):
         def _dst_filename_func(src_file, dest_dir):
             # Profile directory name may contains spaces, e.g. "Profile 1"
-            profile = GChromeHistoryExport.get_profile_from_file_path(src_file)
+            profile: str = GChromeHistoryExport.get_profile_from_file_path(src_file)
             file_name = os.path.basename(src_file)
             return file_name + '-' + profile
 
@@ -178,17 +179,19 @@ class GChromeHistoryExport:
             # /Users/<someuser>/Library/Application Support/Google/Chrome//System Profile/History
             # /Users/<someuser>/Library/Application Support/Google/Chrome//Guest Profile/History
             if not found_db_files:
-                raise ValueError("Cannot find any DB file under directory: " + self.search_basedir)
+                raise ValueError("Cannot find any {} under directory: {}"
+                                 .format(GOOGLE_CHROME_HIST_DB_TEXT, self.search_basedir))
 
-            # Make a copy of each db file as they might be locked by Chrome
-            copied_db_files = [FileUtils.copy_file_to_dir(db, self.db_copies_dir, _dst_filename_func) for db in found_db_files]
+            # Make a copy of each DB file as they might be locked by Chrome if running
+            msg = "Copying {}.".format(GOOGLE_CHROME_HIST_DB_TEXT) + "\n {} -> {}"
+            copied_db_files = [FileUtils.copy_file_to_dir(db, self.db_copies_dir, _dst_filename_func, msg_template=msg)
+                               for db in found_db_files]
             file_sizes = FileUtils.get_file_sizes_in_dir(self.db_copies_dir)
-            LOG.info("Sizes of copied DB files:\n%s", file_sizes)
+            LOG.info("Sizes of %s:\n%s", GOOGLE_CHROME_HIST_DB_TEXT, file_sizes)
             self.options.db_files.extend(copied_db_files)
 
         result = {}
         for db_file in self.options.db_files:
-            LOG.info("Using DB file: %s", db_file)
             self.query_databases(db_file)
             hist_entries = self.query_data_from_db(db_file)
             key = GChromeHistoryExport.get_profile_from_file_path(db_file, split_filename=False)
@@ -198,11 +201,21 @@ class GChromeHistoryExport:
     @staticmethod
     def query_databases(db_file):
         conn = sqlite3.connect(db_file)
-        c = conn.cursor()
-        LOG.info("Listing available databases: ")
-        for row in c.execute("SELECT * FROM main.sqlite_master WHERE type='table'"):
-            # TODO list this with tabulate
-            LOG.info(row)
+        cursor = conn.cursor()
+        LOG.info("Listing available DB tables of %s: %s", GOOGLE_CHROME_HIST_DB_TEXT, db_file)
+        cursor.execute("SELECT * FROM main.sqlite_master WHERE type='table'")
+        columns = list(map(lambda x: x[0], cursor.description))
+        result = cursor.fetchall()
+        header = ["Row"] + columns
+        tables_of_db_tabulated = ResultPrinter.print_table(
+            result,
+            lambda row: row, # Already a tuple
+            header=header,
+            print_result=False,
+            max_width=80,
+            max_width_separator=" ",
+        )
+        LOG.info("\n%s", tables_of_db_tabulated)
 
     @staticmethod
     def query_data_from_db(db_file):
@@ -265,7 +278,7 @@ if __name__ == '__main__':
                               RowStats(all_fields, track_unique=[Field.URL]),
                               truncate_dict,
                               Field.LAST_VISIT_TIME,
-                              'DESC',
+                              Ordering.DESC,
                               add_row_numbers=True)
 
     export_dir = exporter.create_new_export_dir()

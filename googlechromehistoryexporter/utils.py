@@ -23,7 +23,6 @@ def auto_str(cls):
 
 
 class StringUtils:
-
     @staticmethod
     def replace_special_chars(unistr):
         if not isinstance(unistr, unicode):
@@ -34,6 +33,31 @@ class StringUtils:
         valid_chars = "-_.() %s%s" % (string.ascii_letters, string.digits)
         valid_title = ''.join(c for c in normalized if c in valid_chars)
         return valid_title
+
+    @staticmethod
+    def convert_string_to_multiline(string, max_line_length, separator=" "):
+        if not len(string) > max_line_length:
+            return string
+
+        result = ""
+        curr_line_length = 0
+        parts = string.split(separator)
+        for idx, part in enumerate(parts):
+            if curr_line_length + len(part) < max_line_length:
+                result += part
+                # Add length of part + 1 for space to current line length, if required
+                curr_line_length += len(part)
+            else:
+                result += "\n"
+                result += part
+                curr_line_length = len(part)
+
+            # If not last one, add separator
+            if not idx == len(parts) - 1:
+                result += separator
+                curr_line_length += 1
+
+        return result
 
 
 class FileUtils:
@@ -50,16 +74,18 @@ class FileUtils:
         return dirname
 
     @classmethod
-    def ensure_file_exists_and_readable(cls, file):
-        LOG.info("Trying to open file %s for reading..", file)
+    def ensure_file_exists_and_readable(cls, file, verbose=False):
+        if verbose:
+            LOG.info("Trying to open file %s for reading..", file)
         f = open(file, "r")
         if not f.readable():
             raise ValueError("File {} is not readable".format(file))
         return file
 
     @classmethod
-    def ensure_file_exists_and_writable(cls, file):
-        LOG.info("Trying to open file %s for writing..", file)
+    def ensure_file_exists_and_writable(cls, file, verbose=False):
+        if verbose:
+            LOG.info("Trying to open file %s for writing..", file)
         f = open(file, "w")
         if not f.writable():
             raise ValueError("File {} is not readable".format(file))
@@ -75,9 +101,12 @@ class FileUtils:
         return result
 
     @staticmethod
-    def copy_file_to_dir(src_file, dst_dir, dst_file_name_func):
-        dst_filename = dst_file_name_func(src_file, dst_dir)
-        dest_file_path = os.path.join(dst_dir, dst_filename)
+    def copy_file_to_dir(src_file, dst_dir, dst_file_name_func, msg_template=None):
+        dest_filename = dst_file_name_func(src_file, dst_dir)
+        dest_file_path = os.path.join(dst_dir, dest_filename)
+
+        if msg_template:
+            LOG.info(msg_template.format(src_file, dest_file_path))
         shutil.copyfile(src_file, dest_file_path)
         return dest_file_path
 

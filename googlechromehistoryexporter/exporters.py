@@ -4,12 +4,17 @@ from enum import Enum
 import copy
 from tabulate import tabulate
 
-from googlechromehistoryexporter.utils import FileUtils
+from googlechromehistoryexporter.utils import FileUtils, StringUtils
 
 HEADER_ROW_NUMBER = "Row #"
 IGNORED_HEADERS = {HEADER_ROW_NUMBER}
 
 LOG = logging.getLogger(__name__)
+
+
+class Ordering(Enum):
+    ASC = "ASC"
+    DESC = "DESC"
 
 
 class FieldType(Enum):
@@ -38,14 +43,14 @@ class Field(Enum):
 
 
 class DataConverter:
-    def __init__(self, src_data, headers, export_mode, row_stats, truncate_dict, order_by, order_mode, add_row_numbers=False):
+    def __init__(self, src_data, headers, export_mode, row_stats, truncate_dict, order_by, ordering, add_row_numbers=False):
         self.src_data = src_data
         self.headers = headers
         self.export_mode = export_mode
         self.row_stats = row_stats
         self.truncate_dict = truncate_dict
         self.order_by = order_by.get_key()
-        self.order_mode = order_mode
+        self.ordering = ordering
         self.add_row_numbers = add_row_numbers
 
     @staticmethod
@@ -62,8 +67,8 @@ class DataConverter:
         self.src_data = copy.deepcopy(self.src_data)
 
         if self.order_by:
-            LOG.info("Ordering data by field '%s', mode: %s", self.order_by, self.order_mode)
-            reverse = False if self.order_mode == "ASC" else True
+            LOG.info("Ordering data by field '%s', mode: %s", self.order_by, self.ordering)
+            reverse = False if self.ordering == Ordering.ASC else True
             self.src_data = sorted(self.src_data, key=lambda data: getattr(data, self.order_by), reverse=reverse)
 
         if self.add_row_numbers:
@@ -129,9 +134,34 @@ class DataConverter:
 
 class ResultPrinter:
     @staticmethod
-    def print_table(converter):
+    def print_table_with_converter(converter):
         converted_data = converter.convert()
         LOG.info("Printing result table: \n%s", tabulate(converted_data, converter.headers, tablefmt="fancy_grid"))
+
+    @staticmethod
+    def print_table(data, row_callback, header, print_result=True, max_width=None, max_width_separator=" "):
+        converted_data = ResultPrinter._convert_list_data(
+            data, row_callback, max_width=max_width, max_width_separator=max_width_separator
+        )
+        tabulated = tabulate(converted_data, header, tablefmt="fancy_grid")
+        if print_result:
+            print(tabulated)
+        else:
+            return tabulated
+
+    @staticmethod
+    def _convert_list_data(src_data, row_callback, max_width=None, max_width_separator=" "):
+        dest_data = []
+        for idx, data_row in enumerate(src_data):
+            tup = row_callback(data_row)
+            converted_row = [idx + 1]
+            for t in tup:
+                if max_width and isinstance(t, str):
+                    t = StringUtils.convert_string_to_multiline(t, max_line_length=80, separator=max_width_separator)
+                converted_row.append(t)
+            dest_data.append(converted_row)
+
+        return dest_data
 
     @staticmethod
     def print_table_html(converter, to_file):
