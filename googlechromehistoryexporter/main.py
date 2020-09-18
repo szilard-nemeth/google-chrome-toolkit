@@ -23,11 +23,10 @@ DEFAULT_GOOGLE_CHROME_DIR = expanduser("~") + '/Library/Application Support/Goog
 EXPORTED_DIR_NAME = "exported-chrome-db"
 
 
-class OperationMode(Enum):
-    EXPORT_TEXT = "EXPORT_TEXT"
-    EXPORT_CSV = "EXPORT_CSV"
-    PRINT = "PRINT"
-
+class ExportMode(Enum):
+    TEXT = "text"
+    CSV = "csv"
+    HTML = "html"
 
 @auto_str
 class ChromeHistoryEntry:
@@ -82,24 +81,15 @@ class Setup:
                             dest='verbose', default=None, required=False,
                             help='More verbose log')
 
-        parser.add_argument('-p', '--print', nargs='+', type=str, dest='print',
-                            help='Print results to console',
-                            required=False)
-        parser.add_argument('-c', '--csv', action='store_true',
-                            dest='csv', default=False,
-                            required=False,
-                            help='Export entries to a CSV file.')
-        parser.add_argument('-t', '--text', action='store_true',
-                            dest='text', default=False,
-                            required=False,
-                            help='Export entries to a text file separated by newlines.')
-        parser.add_argument('--html', action='store_true',
-                            dest='html', default=False,
-                            required=False,
-                            help='Export entries to a HTML file.')
+        parser.add_argument('--export-mode',
+                            dest='export_mode',
+                            type=str, choices=[mode.value for mode in ExportMode], help='Export mode')
 
         parser.add_argument('-f', '--db-files', dest="db_files", type=FileUtils.ensure_file_exists_and_readable,
                             nargs='+', required=True)
+
+        parser.add_argument('-t', '--truncate', dest="truncate", type=str, required=False, default=True,
+                            help="Whether to truncate exported values when they are too long")
 
         parser.add_argument('-s', '--search-db-files', action='store_true',
                             dest='search_db_files', default=False,
@@ -114,29 +104,19 @@ class Setup:
         args = parser.parse_args()
         print("Args: " + str(args))
 
-        operation_mode = None
-        if args.print:
-            operation_mode = OperationMode.PRINT
-        elif args.csv:
-            operation_mode = OperationMode.EXPORT_CSV
-        elif args.text:
-            operation_mode = OperationMode.EXPORT_TEXT
-        if not operation_mode:
-            LOG.warning("Operation mode has not been provided! Falling back to Print mode.")
-            operation_mode = OperationMode.PRINT
-
-        options = Options(operation_mode, args.db_files, args.search_db_files, args.search_basedir, args.verbose)
+        options = Options(args.export_mode, args.db_files, args.search_db_files, args.search_basedir, args.verbose, args.truncate)
         return options
 
 
 @auto_str
 class Options:
-    def __init__(self, operation_mode, db_files, search_db_files, search_basedir, verbose):
-        self.operation_mode = operation_mode
+    def __init__(self, export_mode, db_files, search_db_files, search_basedir, verbose, truncate):
+        self.export_mode = export_mode
         self.db_files = db_files
         self.search_db_files = search_db_files
         self.search_basedir = search_basedir
         self.verbose = verbose
+        self.truncate = truncate
 
     def __repr__(self):
         return str(self.__dict__)
@@ -156,9 +136,6 @@ class GChromeHistoryExport:
         self.search_basedir = None
         self.setup_dirs()
 
-        # Validation
-        self.validate_operation_mode(options.operation_mode)
-
     def setup_dirs(self):
         home = expanduser("~")
         self.project_out_root = os.path.join(home, PROJECT_NAME)
@@ -175,13 +152,6 @@ class GChromeHistoryExport:
 
         self.search_basedir = options.search_basedir
         FileUtils.ensure_dir_created(self.search_basedir)
-
-    @staticmethod
-    def validate_operation_mode(provided_op_mode):
-        valid_op_modes = [e.name for e in OperationMode]
-        if provided_op_mode and provided_op_mode.name not in valid_op_modes:
-            raise ValueError("Unknown Operation mode, should be any of these: {}".format(valid_op_modes))
-        LOG.info("Using operation mode: %s", options.operation_mode)
 
     @staticmethod
     def get_profile_from_file_path(src_file, split_filename=True):
@@ -278,10 +248,9 @@ if __name__ == '__main__':
     src_data = entries_by_db_file[profile]
     all_fields = [f for f in Field]
 
-    should_truncate = exporter.options.operation_mode == OperationMode.PRINT
     truncate_dict = {}
     for f in all_fields:
-        if not should_truncate or f.get_type() != str:
+        if not exporter.options.truncate or f.get_type() != str:
             truncate_dict[f] = False
         else:
             truncate_dict[f] = True
