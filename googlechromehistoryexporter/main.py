@@ -27,6 +27,7 @@ class ExportMode(Enum):
     TEXT = "text"
     CSV = "csv"
     HTML = "html"
+    ALL = "all"
 
 @auto_str
 class ChromeHistoryEntry:
@@ -254,6 +255,10 @@ if __name__ == '__main__':
         else:
             truncate_dict[f] = True
 
+    copy_src_data = False
+    if exporter.options.export_mode == ExportMode.ALL:
+        copy_src_data = True
+
     converter = DataConverter(src_data,
                               [Field.TITLE, Field.URL, Field.LAST_VISIT_TIME, Field.VISIT_COUNT],
                               exporter.options.export_mode,
@@ -264,15 +269,24 @@ if __name__ == '__main__':
                               add_row_numbers=True)
 
     export_dir = exporter.create_new_export_dir()
+    html_file = export_dir + os.sep + profile + ".html"
+    csv_file = export_dir + os.sep + profile + ".csv"
+    text_file = export_dir + os.sep + profile + ".txt"
     if exporter.options.export_mode == ExportMode.HTML:
-        file = export_dir + os.sep + profile + ".html"
-        ResultPrinter.print_table_html(converter, file)
+        LOG.info("Exporting DB to html file")
+        ResultPrinter.print_table_html(converter, html_file)
     elif exporter.options.export_mode == ExportMode.CSV:
-        file = export_dir + os.sep + profile + ".csv"
-        ResultPrinter.print_table_csv(converter, file)
+        LOG.info("Exporting DB to csv file")
+        ResultPrinter.print_table_csv(converter, csv_file)
     elif exporter.options.export_mode == ExportMode.TEXT:
-        file = export_dir + os.sep + profile + ".txt"
-        ResultPrinter.print_table_fancy_grid(converter, file)
+        LOG.info("Exporting DB to text file")
+        ResultPrinter.print_table_fancy_grid(converter, text_file)
+    elif exporter.options.export_mode == ExportMode.ALL:
+        LOG.info("Exporting DB to all file formats")
+        ResultPrinter.print_table_html(converter, html_file)
+        ResultPrinter.print_table_csv(converter, csv_file)
+        ResultPrinter.print_table_fancy_grid(converter, text_file)
+
 
     end_time = time.time()
     LOG.info("Execution of script took %d seconds", end_time - start_time)

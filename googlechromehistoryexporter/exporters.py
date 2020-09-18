@@ -1,12 +1,13 @@
 import datetime
 import logging
 from enum import Enum
-
+import copy
 from tabulate import tabulate
 
 from googlechromehistoryexporter.utils import FileUtils
 
 HEADER_ROW_NUMBER = "Row #"
+IGNORED_HEADERS = {HEADER_ROW_NUMBER}
 
 LOG = logging.getLogger(__name__)
 
@@ -57,15 +58,21 @@ class DataConverter:
         return "<a href=\"{url}\">{text}</a>".format(url=url, text=url)
 
     def convert(self):
+        # Make a copy of the data as other export methods may use the same data objects afterwards!
+        self.src_data = copy.deepcopy(self.src_data)
+
         if self.order_by:
             LOG.info("Ordering data by field '%s', mode: %s", self.order_by, self.order_mode)
             reverse = False if self.order_mode == "ASC" else True
             self.src_data = sorted(self.src_data, key=lambda data: getattr(data, self.order_by), reverse=reverse)
 
+        if self.add_row_numbers:
+            self.headers.insert(0, HEADER_ROW_NUMBER)
+
         converted_data = []
         row_number = 1
         for d in self.src_data:
-            row_dict = {header: getattr(d, header.get_key()) for header in self.headers}
+            row_dict = {header: getattr(d, header.get_key()) for header in self.headers if header not in IGNORED_HEADERS}
 
             # Convert all field values to str
             for k, v in row_dict.items():
@@ -86,13 +93,12 @@ class DataConverter:
             if self.add_row_numbers:
                 row.append(str(row_number))
             for field in self.headers:
-                row.append(row_dict[field])
+                if field not in IGNORED_HEADERS:
+                    row.append(row_dict[field])
 
             converted_data.append(row)
             row_number += 1
 
-        if self.add_row_numbers:
-            self.headers.insert(0, HEADER_ROW_NUMBER)
         self.row_stats.print_stats()
         return converted_data
 
