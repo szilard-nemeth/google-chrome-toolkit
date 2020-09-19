@@ -31,13 +31,37 @@ Feel free to contribute in a PR.
 
 ## Example commands
 
-HTML export, with auto-detecting DB files: `main.py --search-db-files --export-mode html`
-CSV export, with auto-detecting DB files: `main.py --search-db-files --export-mode csv`
-Text export, with auto-detecting DB files: `main.py --search-db-files --export-mode text`
-Export to all formats with specified profile: `main.py --search-db-files --export-mode all --profile profile1`
-Export to all formats with all profiles: `main.py --search-db-files --export-mode all` 
-Export to all formats with all profiles, restricting date range: `main.py -f /Users/szilardnemeth/Downloads/chromedb --search-db-files --export-mode all --from-date 2020-09-13 --to-date 2020-09-17`
-HTML export with a specified Chrome DB file: `main.py -f <db_file> --export-mode html`
+HTML export, with auto-detecting DB files: 
+```
+main.py --search-db-files --export-mode html
+```
+CSV export, with auto-detecting DB files: 
+```
+main.py --search-db-files --export-mode csv
+```
+Text export, with auto-detecting DB files: 
+```
+main.py --search-db-files --export-mode text
+```
+Export to all formats with specified profile: 
+```
+main.py --search-db-files --export-mode all --profile profile1
+```
+Export to all formats with all profiles: 
+```
+main.py --search-db-files --export-mode all
+``` 
+Export to all formats with all profiles, restricting date range: 
+```
+main.py -f /Users/szilardnemeth/Downloads/chromedb --search-db-files --export-mode all --from-date 2020-09-13 --to-date 2020-09-17
+```
+HTML export with a specified Chrome DB file: 
+```
+main.py -f <db_file> --export-mode html
+```
 
 
-Save all open tabs from a connected Android device: `./save_open_tabs_android.py`
+Save all open tabs from a connected Android device: 
+```
+./save_open_tabs_android.py
+```
