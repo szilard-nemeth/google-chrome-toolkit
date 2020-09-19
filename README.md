@@ -1,8 +1,8 @@
-# Google Chrome history exporter
+# Google Chrome toolkit
 
 This project is a toolkit for Google Chrome to perform various operations that are not available in Chrome or tedious to do manually.
 Currently, there are two use-cases: 
-* Export browser history to various formats including CSV, HTML and simple text file.
+* Export browser history to various formats including CSV, HTML and simple text file. The history is read from Chrome's sqlite DB.
 * Save open tabs to a text file from a connected Android device via adb.
 
 ### Getting started / Setup
