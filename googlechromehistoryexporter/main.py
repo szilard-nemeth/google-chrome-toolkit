@@ -1,5 +1,5 @@
 #!/usr/bin/python
-from googlechromehistoryexporter.constants import GOOGLE_CHROME_HIST_DB_TEXT
+from googlechromehistoryexporter.constants import GOOGLE_CHROME_HIST_DB_TEXT, GOOGLE_CHROME_HIST_DB_TEXT_PLURAL
 from googlechromehistoryexporter.database import ChromeDb
 from googlechromehistoryexporter.exporters import DataConverter, Field, RowStats, ResultPrinter, FieldType, Ordering, \
     ExportMode
@@ -67,8 +67,8 @@ class Setup:
         """This function parses and return arguments passed in"""
 
         parser = argparse.ArgumentParser()
-        # TODO make --db-files and --lookup-db-files mutually exclusive
-        # TODO add argument: profiles: Only export one DB for some profile(s)
+        # TODO make --db-files and --search-db-files mutually exclusive
+        # TODO Add option: --list-db-tables
 
         parser.add_argument('-v', '--verbose', action='store_true',
                             dest='verbose', default=None, required=False,
@@ -102,10 +102,16 @@ class Setup:
                             dest='search_basedir', default=DEFAULT_GOOGLE_CHROME_DIR,
                             required=False,
                             help='Basedir where this script looks for Google Chrome history DB files.')
+        parser.add_argument('-p', '--profile', default='*',
+                            dest='profile',
+                            type=str, required=False,
+                            help="Which profile to use. Default value is: '*', which means export all profiles.")
 
         args = parser.parse_args()
         print("Args: " + str(args))
-        return Options(args)
+        options = Options(args)
+        options.validate()
+        return options
 
 
 class DbResultFilter:
@@ -158,6 +164,7 @@ class Options:
         self.date_range = DateRange.create(args.from_date, args.to_date)
         self.default_range = DateRange.is_default_date_range(self.date_range)
         self.db_result_filter = DbResultFilter(self.date_range)
+        self.profile = args.profile
 
         self.export_filename_postfix = ""
         if not self.default_range:
@@ -165,6 +172,12 @@ class Options:
             to_date_str = self.date_range.to_date.strftime("%Y%m%d")
             self.export_filename_postfix += "__{}_{}" \
                 .format(from_date_str, to_date_str)
+
+    def validate(self):
+        if self.profile and not self.search_db_files:
+            raise ValueError("Invalid configuration. "
+                             "Search DB files (option: '--search-db-files' must be specified when profile is used!")
+
 
     def __repr__(self):
         return str(self.__dict__)
@@ -175,6 +188,7 @@ class GChromeHistoryExport:
         # Options
         self.options = options
         self.search_db_files = options.search_db_files
+        self.available_profiles = None
 
         # Setup Directories
         self.project_out_root = None
@@ -202,11 +216,15 @@ class GChromeHistoryExport:
         FileUtils.ensure_dir_created(self.search_basedir)
 
     @staticmethod
-    def get_profile_from_file_path(src_file, split_filename=True) -> str:
+    def get_profile_from_file_path(src_file, split_filename=True, to_lower=True) -> str:
         if split_filename:
             prof = os.path.dirname(src_file).split(os.sep)[-1]
         else:
             prof = os.path.split(src_file)[-1]
+
+        if to_lower:
+            prof = prof.lower()
+
         return prof.replace(" ", "")
 
     def query_history_entries(self):
@@ -218,7 +236,15 @@ class GChromeHistoryExport:
 
         if self.search_db_files:
             found_db_files = FileUtils.search_files(self.search_basedir, HISTORY_FILE_NAME)
+            self.available_profiles = [GChromeHistoryExport.get_profile_from_file_path(file, to_lower=True)
+                                       for file in found_db_files]
+
             LOG.info("Found DB files: \n%s", "\n".join(found_db_files))
+            if self.options.profile != '*' and self.options.profile.lower() not in self.available_profiles:
+                raise ValueError("No {} found for profile: {}. "
+                                 "Available profiles: {}"
+                                 .format(GOOGLE_CHROME_HIST_DB_TEXT, self.options.profile, self.available_profiles))
+
             # EXAMPLE RESULTS
             # /Users/<someuser>/Library/Application Support/Google/Chrome//Profile 1/History
             # /Users/<someuser>/Library/Application Support/Google/Chrome//Default/History
@@ -252,7 +278,8 @@ class GChromeHistoryExport:
             )
             LOG.info("\n%s", tabulated)
 
-            key = GChromeHistoryExport.get_profile_from_file_path(db_file, split_filename=False)
+            profile = GChromeHistoryExport.get_profile_from_file_path(db_file, split_filename=False, to_lower=True)
+            key = profile.split("-")[1] if '-' in profile else profile
             rows = chrome_db.query_history_entries()
             filtered_rows = self.options.db_result_filter.filter_rows(rows)
             result[key] = filtered_rows
@@ -301,35 +328,49 @@ class GChromeHistoryExport:
             LOG.info("Exporting DB to %s file", ext_enum.name)
             func(converter, filename)
 
+    def export_by_profile(self, entries_by_db_file, profile):
+        src_data = entries_by_db_file[profile]
+        all_fields = [f for f in Field]
+        # TODO move all date/time methods to helper class
+        truncate_dict = {}
+        for f in all_fields:
+            if not self.options.truncate or f.get_type() in {FieldType.DATETIME}:
+                truncate_dict[f] = False
+            else:
+                truncate_dict[f] = True
+        converter = DataConverter(src_data,
+                                  [Field.TITLE, Field.URL, Field.LAST_VISIT_TIME, Field.VISIT_COUNT],
+                                  RowStats(all_fields, track_unique=[Field.URL]),
+                                  truncate_dict,
+                                  Field.LAST_VISIT_TIME,
+                                  Ordering.DESC,
+                                  add_row_numbers=True)
+        self.export(converter, profile)
+
 
 def main():
     start_time = time.time()
+
     # Parse args
     options = Setup.parse_args_to_options()
     exporter = GChromeHistoryExport(options)
+
     # Initialize logging
     Setup.init_logger(exporter.log_dir, console_debug=options.verbose)
+
     # Start exporting
     entries_by_db_file = exporter.query_history_entries()
-    # TODO control this with a CLI argument
-    profile = HISTORY_FILE_NAME + "-Profile1"
-    src_data = entries_by_db_file[profile]
-    all_fields = [f for f in Field]
-    # TODO move all date/time methods to helper class
-    truncate_dict = {}
-    for f in all_fields:
-        if not exporter.options.truncate or f.get_type() in {FieldType.DATETIME}:
-            truncate_dict[f] = False
-        else:
-            truncate_dict[f] = True
-    converter = DataConverter(src_data,
-                              [Field.TITLE, Field.URL, Field.LAST_VISIT_TIME, Field.VISIT_COUNT],
-                              RowStats(all_fields, track_unique=[Field.URL]),
-                              truncate_dict,
-                              Field.LAST_VISIT_TIME,
-                              Ordering.DESC,
-                              add_row_numbers=True)
-    exporter.export(converter, profile)
+
+    profile = exporter.options.profile
+    if profile == '*':
+        LOG.info("Exporting all %s...", GOOGLE_CHROME_HIST_DB_TEXT_PLURAL)
+        for profile in exporter.available_profiles:
+            exporter.export_by_profile(entries_by_db_file, profile)
+    else:
+        # Single profile
+        LOG.info("Exporting %s for profile %s", GOOGLE_CHROME_HIST_DB_TEXT, profile)
+        exporter.export_by_profile(entries_by_db_file, profile)
+
     LOG.info("Execution of script took %d seconds", time.time() - start_time)
 
 
