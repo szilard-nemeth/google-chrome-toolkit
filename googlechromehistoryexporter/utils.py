@@ -122,6 +122,12 @@ class FileUtils:
         return result
 
     @classmethod
+    def get_file_extension(cls, filename):
+        filename, ext = os.path.splitext(filename)
+        ext = ext.replace(".", "")
+        return ext
+
+    @classmethod
     def write_to_file(cls, file_path, data):
         f = open(file_path, 'w')
         f.write(data)

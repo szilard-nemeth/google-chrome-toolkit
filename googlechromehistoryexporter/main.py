@@ -169,7 +169,7 @@ class Options:
         if not self.default_range:
             from_date_str = self.date_range.from_date.strftime("%Y%m%d")
             to_date_str = self.date_range.to_date.strftime("%Y%m%d")
-            self.export_filename_postfix += "__{}_{}"\
+            self.export_filename_postfix += "__{}_{}" \
                 .format(from_date_str, to_date_str)
 
     def __repr__(self):
@@ -279,26 +279,33 @@ class GChromeHistoryExport:
 
     def export(self, converter):
         export_dir = exporter.create_new_export_dir()
-        export_filenames = {
-            ExportMode.HTML: self.get_exported_filename(export_dir, profile, Extension.HTML),
-            ExportMode.CSV: self.get_exported_filename(export_dir, profile, Extension.CSV),
-            ExportMode.TEXT: self.get_exported_filename(export_dir, profile, Extension.TEXT)
-        }
+        html_filename = self.get_exported_filename(export_dir, profile, Extension.HTML)
+        csv_filename = self.get_exported_filename(export_dir, profile, Extension.CSV)
+        text_filename = self.get_exported_filename(export_dir, profile, Extension.TEXT)
 
-        if exporter.options.export_mode == ExportMode.HTML:
-            LOG.info("Exporting DB to HTML file")
-            ResultPrinter.print_table_html(converter, export_filenames[ExportMode.HTML])
-        elif exporter.options.export_mode == ExportMode.CSV:
-            LOG.info("Exporting DB to CSV file")
-            ResultPrinter.print_table_csv(converter, export_filenames[ExportMode.CSV])
-        elif exporter.options.export_mode == ExportMode.TEXT:
-            LOG.info("Exporting DB to text file")
-            ResultPrinter.print_table_fancy_grid(converter, export_filenames[ExportMode.TEXT])
-        elif exporter.options.export_mode == ExportMode.ALL:
-            LOG.info("Exporting DB to ALL file formats")
-            ResultPrinter.print_table_html(converter, export_filenames[ExportMode.HTML])
-            ResultPrinter.print_table_csv(converter, export_filenames[ExportMode.CSV])
-            ResultPrinter.print_table_fancy_grid(converter, export_filenames[ExportMode.TEXT])
+        export_filenames_dict = {
+            ExportMode.HTML: [html_filename],
+            ExportMode.CSV: [csv_filename],
+            ExportMode.TEXT: [text_filename],
+            ExportMode.ALL: [html_filename, csv_filename, text_filename]
+        }
+        export_funcs_dict = {
+            ExportMode.HTML: [ResultPrinter.print_table_html],
+            ExportMode.CSV: [ResultPrinter.print_table_csv],
+            ExportMode.TEXT: [ResultPrinter.print_table_fancy_grid],
+            ExportMode.ALL: [
+                ResultPrinter.print_table_html,
+                ResultPrinter.print_table_csv,
+                ResultPrinter.print_table_fancy_grid
+            ]
+        }
+        export_mode = exporter.options.export_mode
+        export_funcs = export_funcs_dict[export_mode]
+        export_filenames = export_filenames_dict[export_mode]
+        for func, filename in zip(export_funcs, export_filenames):
+            ext_enum = Extension(FileUtils.get_file_extension(filename))
+            LOG.info("Exporting DB to %s file", ext_enum.name)
+            func(converter, filename)
 
 
 if __name__ == '__main__':
