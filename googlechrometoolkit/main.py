@@ -63,13 +63,15 @@ class Setup:
     def parse_args_to_options():
         """This function parses and return arguments passed in"""
 
-        parser = argparse.ArgumentParser()
         # TODO make --db-files and --search-db-files mutually exclusive
-        # TODO Add option: --list-db-tables
-
+        parser = argparse.ArgumentParser()
         parser.add_argument('-v', '--verbose', action='store_true',
                             dest='verbose', default=None, required=False,
                             help='More verbose log')
+
+        parser.add_argument('-l', '--list-db-tables', action='store_true',
+                            dest='list_db_tables', required=False,
+                            help='Whether to list DB tables of ' + GOOGLE_CHROME_HIST_DB_TEXT_PLURAL)
 
         parser.add_argument('--export-mode',
                             dest='export_mode',
@@ -94,11 +96,13 @@ class Setup:
                             dest='is_search_db_files', default=False,
                             required=False,
                             help='Whether to search for DB files.')
+
         parser.add_argument('-sb', '--search-basedir',
                             type=FileUtils.ensure_dir_created,
                             dest='search_basedir', default=DEFAULT_GOOGLE_CHROME_DIR,
                             required=False,
                             help='Basedir where this script looks for Google Chrome history DB files.')
+
         parser.add_argument('-p', '--profile', default=ALL_PROFILES,
                             dest='profile',
                             type=str, required=False,
@@ -165,6 +169,7 @@ class Options:
         self.default_range = DateRange.is_default_date_range(self.date_range)
         self.db_result_filter = DbResultFilter(self.date_range)
         self.profile = args.profile
+        self.is_list_db_tables = args.list_db_tables
 
         self.export_filename_postfix = ""
         if not self.default_range:
@@ -238,7 +243,8 @@ class GChromeHistoryExport:
         result = {}
         for db_file in self.options.db_files:
             chrome_db = ChromeDb(db_file)
-            self.print_db_tables(chrome_db)
+            if self.options.is_list_db_tables:
+                self.print_db_tables(chrome_db, db_file)
             key, filtered_rows = self.query_history_entries_from_db(chrome_db, db_file)
             result[key] = filtered_rows
         return result
@@ -251,7 +257,8 @@ class GChromeHistoryExport:
         return key, filtered_rows
 
     @staticmethod
-    def print_db_tables(chrome_db):
+    def print_db_tables(chrome_db, db_file):
+        LOG.info("Printing DB tables of %s, file: %s", GOOGLE_CHROME_HIST_DB_TEXT, db_file)
         tables, columns = chrome_db.query_db_tables()
         header = ["Row"] + columns
         tabulated = ResultPrinter.print_table(

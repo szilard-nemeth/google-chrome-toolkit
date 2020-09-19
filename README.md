@@ -60,6 +60,10 @@ HTML export with a specified Chrome DB file:
 main.py -f <db_file> --export-mode html
 ```
 
+Export and list DB tables:
+```
+main.py -f <db_file> --list-db-tables --export-mode html
+```
 
 Save all open tabs from a connected Android device: 
 ```
