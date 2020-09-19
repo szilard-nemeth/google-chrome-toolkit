@@ -94,6 +94,7 @@ class DataConverter:
                 self._modify_dict_value(row_dict, field, value, mod_val)
 
             # Make row
+            # TODO bug: Final output contains enum name instead of name, e.g. Field.URL
             row = []
             if self.add_row_numbers:
                 row.append(str(row_number))
@@ -178,6 +179,7 @@ class ResultPrinter:
 
     @staticmethod
     def print_table_csv(converter, to_file):
+        # TODO CSV export is buggy, it exports html tags as well
         FileUtils.ensure_file_exists_and_writable(to_file)
         converted_data = converter.convert()
         tabulated = tabulate(converted_data, converter.headers, tablefmt="csv")

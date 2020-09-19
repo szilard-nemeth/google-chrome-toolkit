@@ -1,4 +1,6 @@
 #!/usr/bin/python
+from googlechromehistoryexporter.constants import GOOGLE_CHROME_HIST_DB_TEXT
+from googlechromehistoryexporter.database import ChromeDb
 from googlechromehistoryexporter.exporters import DataConverter, Field, RowStats, ResultPrinter, FieldType, Ordering
 
 __author__ = 'Szilard Nemeth'
@@ -21,7 +23,6 @@ PROJECT_NAME = 'gchromehistoryexporter'
 HISTORY_FILE_NAME = 'History'
 DEFAULT_GOOGLE_CHROME_DIR = expanduser("~") + '/Library/Application Support/Google/Chrome/'
 EXPORTED_DIR_NAME = "exported-chrome-db"
-GOOGLE_CHROME_HIST_DB_TEXT = "Google Chrome History DB file"
 
 
 class ExportMode(Enum):
@@ -29,17 +30,6 @@ class ExportMode(Enum):
     CSV = "csv"
     HTML = "html"
     ALL = "all"
-
-@auto_str
-class ChromeHistoryEntry:
-    def __init__(self, title, url, last_visit_time, visit_count):
-        self.title = title
-        self.url = url
-        self.last_visit_time = last_visit_time
-        self.visit_count = visit_count
-
-    def __repr__(self):
-        return str(self.__dict__)
 
 
 class Setup:
@@ -87,6 +77,14 @@ class Setup:
                             dest='export_mode',
                             type=str, choices=[mode.value for mode in ExportMode], help='Export mode',
                             required=True)
+
+        parser.add_argument('--from-date', type=datetime.date.fromisoformat,
+                            dest="from_date", help="Query history entries from this date. "
+                                                   "The date must be in ISO 8601 format, for example: YYYY-MM-DD")
+
+        parser.add_argument('--to-date', type=datetime.date.fromisoformat,
+                            dest="to_date", help="Query history entries until this date. "
+                                                 "The date must be in ISO 8601 format, for example: YYYY-MM-DD")
 
         parser.add_argument('-f', '--db-files', dest="db_files", type=FileUtils.ensure_file_exists_and_readable,
                             nargs='+', required=True)
@@ -192,49 +190,22 @@ class GChromeHistoryExport:
 
         result = {}
         for db_file in self.options.db_files:
-            self.query_databases(db_file)
-            hist_entries = self.query_data_from_db(db_file)
+            chrome_db = ChromeDb(db_file)
+            tables, columns = chrome_db.query_db_tables()
+            header = ["Row"] + columns
+            tabulated = ResultPrinter.print_table(
+                tables,
+                lambda row: row,  # Already a tuple
+                header=header,
+                print_result=False,
+                max_width=80,
+                max_width_separator=" ",
+            )
+            LOG.info("\n%s", tabulated)
+
             key = GChromeHistoryExport.get_profile_from_file_path(db_file, split_filename=False)
-            result[key] = hist_entries
+            result[key] = chrome_db.query_history_entries()
         return result
-
-    @staticmethod
-    def query_databases(db_file):
-        conn = sqlite3.connect(db_file)
-        cursor = conn.cursor()
-        LOG.info("Listing available DB tables of %s: %s", GOOGLE_CHROME_HIST_DB_TEXT, db_file)
-        cursor.execute("SELECT * FROM main.sqlite_master WHERE type='table'")
-        columns = list(map(lambda x: x[0], cursor.description))
-        result = cursor.fetchall()
-        header = ["Row"] + columns
-        tables_of_db_tabulated = ResultPrinter.print_table(
-            result,
-            lambda row: row, # Already a tuple
-            header=header,
-            print_result=False,
-            max_width=80,
-            max_width_separator=" ",
-        )
-        LOG.info("\n%s", tables_of_db_tabulated)
-
-    @staticmethod
-    def query_data_from_db(db_file):
-        def _convert_chrome_datetime(microseconds):
-            """
-            Since Google Chrome stores the last visit time with microseconds passed since 1601-01-01T00:00:00Z (Windows epoch),
-            the number of milliseconds of stored date need to be added to the date of 1601-01-01 to get the correct date value.
-            :param microseconds:
-            :return:
-            """
-            return datetime.datetime(1601, 1, 1) + datetime.timedelta(microseconds=microseconds)
-
-        conn = sqlite3.connect(db_file)
-        c = conn.cursor()
-        query = "select title, url, last_visit_time, visit_count from urls order by last_visit_time desc"
-        c.execute(query)
-        results = c.fetchall()
-        result_objs = [ChromeHistoryEntry(r[0], r[1], _convert_chrome_datetime(r[2]), r[3]) for r in results]
-        return result_objs
 
     def create_new_export_dir(self):
         now = datetime.datetime.now()
@@ -256,7 +227,7 @@ if __name__ == '__main__':
     # Start exporting
     entries_by_db_file = exporter.query_history_entries()
 
-    # TODO control this by CLI argument
+    # TODO control this with a CLI argument
     profile = HISTORY_FILE_NAME + "-Profile1"
     src_data = entries_by_db_file[profile]
     all_fields = [f for f in Field]
@@ -267,10 +238,6 @@ if __name__ == '__main__':
             truncate_dict[f] = False
         else:
             truncate_dict[f] = True
-
-    copy_src_data = False
-    if exporter.options.export_mode == ExportMode.ALL:
-        copy_src_data = True
 
     converter = DataConverter(src_data,
                               [Field.TITLE, Field.URL, Field.LAST_VISIT_TIME, Field.VISIT_COUNT],
@@ -286,20 +253,18 @@ if __name__ == '__main__':
     csv_file = export_dir + os.sep + profile + ".csv"
     text_file = export_dir + os.sep + profile + ".txt"
     if exporter.options.export_mode == ExportMode.HTML:
-        LOG.info("Exporting DB to html file")
+        LOG.info("Exporting DB to HTML file")
         ResultPrinter.print_table_html(converter, html_file)
     elif exporter.options.export_mode == ExportMode.CSV:
-        LOG.info("Exporting DB to csv file")
+        LOG.info("Exporting DB to CSV file")
         ResultPrinter.print_table_csv(converter, csv_file)
     elif exporter.options.export_mode == ExportMode.TEXT:
         LOG.info("Exporting DB to text file")
         ResultPrinter.print_table_fancy_grid(converter, text_file)
     elif exporter.options.export_mode == ExportMode.ALL:
-        LOG.info("Exporting DB to all file formats")
+        LOG.info("Exporting DB to ALL file formats")
         ResultPrinter.print_table_html(converter, html_file)
         ResultPrinter.print_table_csv(converter, csv_file)
         ResultPrinter.print_table_fancy_grid(converter, text_file)
 
-
-    end_time = time.time()
-    LOG.info("Execution of script took %d seconds", end_time - start_time)
+    LOG.info("Execution of script took %d seconds", time.time() - start_time)
