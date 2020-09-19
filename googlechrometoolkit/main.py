@@ -328,7 +328,6 @@ class GChromeHistoryExport:
     def export_by_profile(self, entries_by_db_file, profile):
         src_data = entries_by_db_file[profile]
         all_fields = [f for f in Field]
-        # TODO move all date/time methods to helper class
         truncate_dict = {}
         for f in all_fields:
             if not self.options.truncate or f.get_type() in {FieldType.DATETIME}:
