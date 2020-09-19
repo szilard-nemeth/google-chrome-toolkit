@@ -4,6 +4,7 @@ from enum import Enum
 import copy
 from tabulate import tabulate
 
+from googlechromehistoryexporter.main import ExportMode
 from googlechromehistoryexporter.utils import FileUtils, StringUtils
 
 HEADER_ROW_NUMBER = "Row #"
@@ -43,11 +44,10 @@ class Field(Enum):
 
 
 class DataConverter:
-    def __init__(self, src_data, headers, export_mode, row_stats, truncate_dict, order_by, ordering,
+    def __init__(self, src_data, headers, row_stats, truncate_dict, order_by, ordering,
                  add_row_numbers=False):
         self.src_data = src_data
         self.headers = headers
-        self.export_mode = export_mode
         self.row_stats = row_stats
         self.truncate_dict = truncate_dict
         self.order_by = order_by.get_key()
@@ -63,12 +63,12 @@ class DataConverter:
     def _make_html_link(url):
         return "<a href=\"{url}\">{text}</a>".format(url=url, text=url)
 
-    def convert(self):
+    def convert(self, export_mode):
         # Make a copy of the data as other export methods may use the same data objects afterwards!
         self.src_data = copy.deepcopy(self.src_data)
 
         if self.order_by:
-            LOG.info("Ordering data by field '%s', mode: %s", self.order_by, self.ordering)
+            LOG.info("Ordering data by field '%s', ordering: %s", self.order_by, self.ordering)
             reverse = False if self.ordering == Ordering.ASC else True
             self.src_data = sorted(self.src_data, key=lambda data: getattr(data, self.order_by), reverse=reverse)
 
@@ -90,7 +90,7 @@ class DataConverter:
 
             # Apply truncates
             for field, value in row_dict.items():
-                mod_val = self.convert_str_field(field, value)
+                mod_val = self.convert_str_field(field, value, export_mode)
                 self._modify_dict_value(row_dict, field, value, mod_val)
                 mod_val = self.convert_datetime_field(field, value)
                 self._modify_dict_value(row_dict, field, value, mod_val)
@@ -110,7 +110,7 @@ class DataConverter:
         self.row_stats.print_stats()
         return converted_data
 
-    def convert_str_field(self, field, value):
+    def convert_str_field(self, field, value, export_mode):
         truncate = self.truncate_dict[field]
         max_len = field.get_max_length()
         allowed_field_types = {FieldType.SIMPLE_STR, FieldType.URL}
@@ -120,7 +120,7 @@ class DataConverter:
             LOG.debug("Truncated %s: '%s', "
                       "original length: %d, new length: %d", field, orig_value, len(orig_value), max_len)
 
-        if field.get_type() == FieldType.URL:
+        if export_mode == ExportMode.HTML and field.get_type() == FieldType.URL:
             value = self._make_html_link(value)
         return value
 
@@ -138,7 +138,7 @@ class DataConverter:
 class ResultPrinter:
     @staticmethod
     def print_table_with_converter(converter):
-        converted_data = converter.convert()
+        converted_data = converter.convert(ExportMode.TEXT)
         LOG.info("Printing result table: \n%s", tabulate(converted_data, converter.headers, tablefmt="fancy_grid"))
 
     @staticmethod
@@ -170,7 +170,7 @@ class ResultPrinter:
     def print_table_html(converter, to_file):
         import html
         FileUtils.ensure_file_exists_and_writable(to_file)
-        converted_data = converter.convert()
+        converted_data = converter.convert(ExportMode.HTML)
         tabulated = tabulate(converted_data, converter.headers, tablefmt="html")
 
         # Unescape manually here, as tabulate automatically escapes HTML content and there's no way to turn this off.
@@ -181,18 +181,16 @@ class ResultPrinter:
 
     @staticmethod
     def print_table_csv(converter, to_file):
-        # TODO CSV export is buggy, it exports html tags as well
         FileUtils.ensure_file_exists_and_writable(to_file)
-        converted_data = converter.convert()
+        converted_data = converter.convert(ExportMode.CSV)
         tabulated = tabulate(converted_data, converter.headers, tablefmt="csv")
         LOG.info("Writing results to file: %s", to_file)
         FileUtils.write_to_file(to_file, tabulated)
 
     @staticmethod
     def print_table_fancy_grid(converter, to_file):
-        # TODO TEXT export is buggy, it exports html tags as well
         FileUtils.ensure_file_exists_and_writable(to_file)
-        converted_data = converter.convert()
+        converted_data = converter.convert(ExportMode.TEXT)
         tabulated = tabulate(converted_data, converter.headers, tablefmt="fancy_grid")
         LOG.info("Writing results to file: %s", to_file)
         FileUtils.write_to_file(to_file, tabulated)

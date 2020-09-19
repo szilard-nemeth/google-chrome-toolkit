@@ -330,7 +330,6 @@ def main():
             truncate_dict[f] = True
     converter = DataConverter(src_data,
                               [Field.TITLE, Field.URL, Field.LAST_VISIT_TIME, Field.VISIT_COUNT],
-                              exporter.options.export_mode,
                               RowStats(all_fields, track_unique=[Field.URL]),
                               truncate_dict,
                               Field.LAST_VISIT_TIME,
