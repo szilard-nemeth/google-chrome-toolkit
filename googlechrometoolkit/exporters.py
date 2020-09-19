@@ -4,12 +4,19 @@ from enum import Enum
 import copy
 from tabulate import tabulate
 
-from googlechromehistoryexporter.utils import FileUtils, StringUtils
+from googlechrometoolkit.utils import FileUtils, StringUtils
 
 HEADER_ROW_NUMBER = "Row #"
 IGNORED_HEADERS = {HEADER_ROW_NUMBER}
 
 LOG = logging.getLogger(__name__)
+
+
+class ExportMode(Enum):
+    TEXT = "text"
+    CSV = "csv"
+    HTML = "html"
+    ALL = "all"
 
 
 class Ordering(Enum):
@@ -241,10 +248,3 @@ class RowStats:
     def _print(self, field_name):
         field_value = self.longest_fields[field_name]
         LOG.debug("Longest line is %d characters long. Field name: %s", len(field_value), field_name)
-
-
-class ExportMode(Enum):
-    TEXT = "text"
-    CSV = "csv"
-    HTML = "html"
-    ALL = "all"

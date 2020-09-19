@@ -2,8 +2,8 @@ import datetime
 import logging
 import sqlite3
 
-from googlechromehistoryexporter.constants import GOOGLE_CHROME_HIST_DB_TEXT
-from googlechromehistoryexporter.utils import auto_str
+from googlechrometoolkit.constants import GOOGLE_CHROME_HIST_DB_TEXT
+from googlechrometoolkit.utils import auto_str
 
 LOG = logging.getLogger(__name__)
 

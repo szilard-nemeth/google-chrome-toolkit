@@ -1,8 +1,10 @@
 #!/usr/bin/python
-from googlechromehistoryexporter.constants import GOOGLE_CHROME_HIST_DB_TEXT, GOOGLE_CHROME_HIST_DB_TEXT_PLURAL
-from googlechromehistoryexporter.database import ChromeDb
-from googlechromehistoryexporter.exporters import DataConverter, Field, RowStats, ResultPrinter, FieldType, Ordering, \
+from googlechrometoolkit.constants import GOOGLE_CHROME_HIST_DB_TEXT, GOOGLE_CHROME_HIST_DB_TEXT_PLURAL
+from googlechrometoolkit.database import ChromeDb
+from googlechrometoolkit.exporters import DataConverter, Field, RowStats, ResultPrinter, FieldType, Ordering, \
     ExportMode
+
+FILE_PROFILE_SEP = '-'
 
 __author__ = 'Szilard Nemeth'
 import argparse
@@ -15,7 +17,7 @@ import time
 from logging.handlers import TimedRotatingFileHandler
 from enum import Enum
 
-from googlechromehistoryexporter.utils import auto_str, FileUtils
+from googlechrometoolkit.utils import auto_str, FileUtils
 
 LOG = logging.getLogger(__name__)
 PROJECT_NAME = 'gchromehistoryexporter'
@@ -178,7 +180,6 @@ class Options:
             raise ValueError("Invalid configuration. "
                              "Search DB files (option: '--search-db-files' must be specified when profile is used!")
 
-
     def __repr__(self):
         return str(self.__dict__)
 
@@ -232,7 +233,7 @@ class GChromeHistoryExport:
             # Profile directory name may contains spaces, e.g. "Profile 1"
             profile: str = GChromeHistoryExport.get_profile_from_file_path(src_file)
             file_name = os.path.basename(src_file)
-            return file_name + '-' + profile
+            return file_name + FILE_PROFILE_SEP + profile
 
         if self.search_db_files:
             found_db_files = FileUtils.search_files(self.search_basedir, HISTORY_FILE_NAME)
@@ -279,7 +280,7 @@ class GChromeHistoryExport:
             LOG.info("\n%s", tabulated)
 
             profile = GChromeHistoryExport.get_profile_from_file_path(db_file, split_filename=False, to_lower=True)
-            key = profile.split("-")[1] if '-' in profile else profile
+            key = profile.split(FILE_PROFILE_SEP)[1] if FILE_PROFILE_SEP in profile else profile
             rows = chrome_db.query_history_entries()
             filtered_rows = self.options.db_result_filter.filter_rows(rows)
             result[key] = filtered_rows
@@ -368,7 +369,7 @@ def main():
             exporter.export_by_profile(entries_by_db_file, profile)
     else:
         # Single profile
-        LOG.info("Exporting %s for profile %s", GOOGLE_CHROME_HIST_DB_TEXT, profile)
+        LOG.info("Exporting %s for single profile: %s", GOOGLE_CHROME_HIST_DB_TEXT, profile)
         exporter.export_by_profile(entries_by_db_file, profile)
 
     LOG.info("Execution of script took %d seconds", time.time() - start_time)
