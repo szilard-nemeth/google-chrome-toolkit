@@ -4,9 +4,7 @@ import os
 import shutil
 import string
 import unicodedata
-
 import humanize
-from tabulate import tabulate
 
 LOG = logging.getLogger(__name__)
 
@@ -25,7 +23,7 @@ def auto_str(cls):
 class StringUtils:
     @staticmethod
     def replace_special_chars(unistr):
-        if not isinstance(unistr, unicode):
+        if not isinstance(unistr, str):
             LOG.warning("Object expected to be unicode: " + str(unistr))
             return str(unistr)
         normalized = unicodedata.normalize('NFD', unistr).encode('ascii', 'ignore')

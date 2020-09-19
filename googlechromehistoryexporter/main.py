@@ -204,7 +204,7 @@ class GChromeHistoryExport:
         self.db_copies_dir = os.path.join(self.project_out_root, 'db_copies')
         FileUtils.ensure_dir_created(self.db_copies_dir)
 
-        self.search_basedir = options.search_basedir
+        self.search_basedir = self.options.search_basedir
         FileUtils.ensure_dir_created(self.search_basedir)
 
     @staticmethod
@@ -277,8 +277,8 @@ class GChromeHistoryExport:
             filename += "." + ext_enum.value
         return filename
 
-    def export(self, converter):
-        export_dir = exporter.create_new_export_dir()
+    def export(self, converter, profile):
+        export_dir = self.create_new_export_dir()
         html_filename = self.get_exported_filename(export_dir, profile, Extension.HTML)
         csv_filename = self.get_exported_filename(export_dir, profile, Extension.CSV)
         text_filename = self.get_exported_filename(export_dir, profile, Extension.TEXT)
@@ -299,7 +299,7 @@ class GChromeHistoryExport:
                 ResultPrinter.print_table_fancy_grid
             ]
         }
-        export_mode = exporter.options.export_mode
+        export_mode = self.options.export_mode
         export_funcs = export_funcs_dict[export_mode]
         export_filenames = export_filenames_dict[export_mode]
         for func, filename in zip(export_funcs, export_filenames):
@@ -308,33 +308,26 @@ class GChromeHistoryExport:
             func(converter, filename)
 
 
-if __name__ == '__main__':
+def main():
     start_time = time.time()
-
     # Parse args
     options = Setup.parse_args_to_options()
     exporter = GChromeHistoryExport(options)
-
     # Initialize logging
     Setup.init_logger(exporter.log_dir, console_debug=options.verbose)
-
     # Start exporting
     entries_by_db_file = exporter.query_history_entries()
-
     # TODO control this with a CLI argument
     profile = HISTORY_FILE_NAME + "-Profile1"
     src_data = entries_by_db_file[profile]
     all_fields = [f for f in Field]
-
     # TODO move all date/time methods to helper class
-
     truncate_dict = {}
     for f in all_fields:
         if not exporter.options.truncate or f.get_type() in {FieldType.DATETIME}:
             truncate_dict[f] = False
         else:
             truncate_dict[f] = True
-
     converter = DataConverter(src_data,
                               [Field.TITLE, Field.URL, Field.LAST_VISIT_TIME, Field.VISIT_COUNT],
                               exporter.options.export_mode,
@@ -343,6 +336,9 @@ if __name__ == '__main__':
                               Field.LAST_VISIT_TIME,
                               Ordering.DESC,
                               add_row_numbers=True)
-    exporter.export(converter)
-
+    exporter.export(converter, profile)
     LOG.info("Execution of script took %d seconds", time.time() - start_time)
+
+
+if __name__ == '__main__':
+    main()

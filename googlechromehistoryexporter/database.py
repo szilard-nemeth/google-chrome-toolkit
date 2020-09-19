@@ -36,8 +36,10 @@ class ChromeDb:
     def query_history_entries(self):
         def _convert_chrome_datetime(microseconds):
             """
-            Since Google Chrome stores the last visit time with microseconds passed since 1601-01-01T00:00:00Z (Windows epoch),
-            the number of milliseconds of stored date need to be added to the date of 1601-01-01 to get the correct date value.
+            Since Google Chrome stores the last visit time with microseconds passed since
+            1601-01-01T00:00:00Z (Windows epoch),
+            the number of milliseconds of stored date need to be added to the date of
+            1601-01-01 to get the correct date value.
             :param microseconds:
             :return:
             """

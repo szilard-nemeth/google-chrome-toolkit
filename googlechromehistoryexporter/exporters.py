@@ -43,7 +43,8 @@ class Field(Enum):
 
 
 class DataConverter:
-    def __init__(self, src_data, headers, export_mode, row_stats, truncate_dict, order_by, ordering, add_row_numbers=False):
+    def __init__(self, src_data, headers, export_mode, row_stats, truncate_dict, order_by, ordering,
+                 add_row_numbers=False):
         self.src_data = src_data
         self.headers = headers
         self.export_mode = export_mode
@@ -77,7 +78,8 @@ class DataConverter:
         converted_data = []
         row_number = 1
         for d in self.src_data:
-            row_dict = {header: getattr(d, header.get_key()) for header in self.headers if header not in IGNORED_HEADERS}
+            row_dict = {header: getattr(d, header.get_key())
+                        for header in self.headers if header not in IGNORED_HEADERS}
 
             # Convert all field values to str
             for k, v in row_dict.items():
