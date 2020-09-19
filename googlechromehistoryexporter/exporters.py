@@ -188,6 +188,7 @@ class ResultPrinter:
 
     @staticmethod
     def print_table_fancy_grid(converter, to_file):
+        # TODO TEXT export is buggy, it exports html tags as well
         FileUtils.ensure_file_exists_and_writable(to_file)
         converted_data = converter.convert()
         tabulated = tabulate(converted_data, converter.headers, tablefmt="fancy_grid")

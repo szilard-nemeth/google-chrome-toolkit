@@ -6,10 +6,8 @@ from googlechromehistoryexporter.exporters import DataConverter, Field, RowStats
 __author__ = 'Szilard Nemeth'
 import argparse
 import sys
-import datetime as dt
 import logging
 import os
-import sqlite3
 from os.path import expanduser
 import datetime
 import time
@@ -30,6 +28,12 @@ class ExportMode(Enum):
     CSV = "csv"
     HTML = "html"
     ALL = "all"
+
+
+class Extension(Enum):
+    TEXT = "txt"
+    CSV = "csv"
+    HTML = "html"
 
 
 class Setup:
@@ -107,6 +111,27 @@ class Setup:
         return Options(args)
 
 
+class DbResultFilter:
+    def __init__(self, date_range):
+        self.date_range = date_range
+
+    def _filter_by_date(self, row):
+        if self.date_range.from_date <= row.last_visit_time <= self.date_range.to_date:
+            return True
+        return False
+
+    def filter_rows(self, rows):
+        LOG.info("Filtering by date range: %s", self.date_range)
+        return list(filter(lambda row: self._filter_by_date(row), rows))
+
+
+@auto_str
+class DateRange:
+    def __init__(self, from_date, to_date):
+        self.from_date = from_date
+        self.to_date = to_date
+
+
 @auto_str
 class Options:
     def __init__(self, args):
@@ -116,6 +141,34 @@ class Options:
         self.search_basedir = args.search_basedir
         self.verbose = args.verbose
         self.truncate = args.truncate
+        self.date_range = self.create_date_range(args)
+        self.default_range = Options.is_default_date_range(self.date_range)
+        self.db_result_filter = DbResultFilter(self.date_range)
+
+        self.export_filename_postfix = ""
+        if not self.default_range:
+            from_date_str = self.date_range.from_date.strftime("%Y%m%d")
+            to_date_str = self.date_range.to_date.strftime("%Y%m%d")
+            self.export_filename_postfix += "__{}_{}"\
+                .format(from_date_str, to_date_str)
+
+    @staticmethod
+    def is_default_date_range(date_range):
+        now = datetime.datetime.now()
+        if date_range.from_date > datetime.datetime(1601, 1, 1) or date_range.to_date < now:
+            return False
+        return True
+
+    @staticmethod
+    def create_date_range(args):
+        from_date = datetime.datetime(1601, 1, 1)
+        if args.from_date:
+            from_date = datetime.datetime.combine(args.from_date, datetime.datetime.min.time())
+
+        to_date = datetime.datetime(2399, 1, 1)
+        if args.to_date:
+            to_date = datetime.datetime.combine(args.to_date, datetime.datetime.min.time())
+        return DateRange(from_date, to_date)
 
     def __repr__(self):
         return str(self.__dict__)
@@ -204,7 +257,9 @@ class GChromeHistoryExport:
             LOG.info("\n%s", tabulated)
 
             key = GChromeHistoryExport.get_profile_from_file_path(db_file, split_filename=False)
-            result[key] = chrome_db.query_history_entries()
+            rows = chrome_db.query_history_entries()
+            filtered_rows = self.options.db_result_filter.filter_rows(rows)
+            result[key] = filtered_rows
         return result
 
     def create_new_export_dir(self):
@@ -213,26 +268,35 @@ class GChromeHistoryExport:
         dirname = FileUtils.ensure_dir_created(os.path.join(self.exports_dir, EXPORTED_DIR_NAME + '-' + dt_string))
         return dirname
 
-    @staticmethod
-    def export(converter):
+    def get_exported_filename(self, export_dir, profile, ext_enum):
+        filename = export_dir + os.sep + profile
+        if self.options.export_filename_postfix != "":
+            filename += self.options.export_filename_postfix
+            filename += "." + ext_enum.value
+        return filename
+
+    def export(self, converter):
         export_dir = exporter.create_new_export_dir()
-        html_file = export_dir + os.sep + profile + ".html"
-        csv_file = export_dir + os.sep + profile + ".csv"
-        text_file = export_dir + os.sep + profile + ".txt"
+        export_filenames = {
+            ExportMode.HTML: self.get_exported_filename(export_dir, profile, Extension.HTML),
+            ExportMode.CSV: self.get_exported_filename(export_dir, profile, Extension.CSV),
+            ExportMode.TEXT: self.get_exported_filename(export_dir, profile, Extension.TEXT)
+        }
+
         if exporter.options.export_mode == ExportMode.HTML:
             LOG.info("Exporting DB to HTML file")
-            ResultPrinter.print_table_html(converter, html_file)
+            ResultPrinter.print_table_html(converter, export_filenames[ExportMode.HTML])
         elif exporter.options.export_mode == ExportMode.CSV:
             LOG.info("Exporting DB to CSV file")
-            ResultPrinter.print_table_csv(converter, csv_file)
+            ResultPrinter.print_table_csv(converter, export_filenames[ExportMode.CSV])
         elif exporter.options.export_mode == ExportMode.TEXT:
             LOG.info("Exporting DB to text file")
-            ResultPrinter.print_table_fancy_grid(converter, text_file)
+            ResultPrinter.print_table_fancy_grid(converter, export_filenames[ExportMode.TEXT])
         elif exporter.options.export_mode == ExportMode.ALL:
             LOG.info("Exporting DB to ALL file formats")
-            ResultPrinter.print_table_html(converter, html_file)
-            ResultPrinter.print_table_csv(converter, csv_file)
-            ResultPrinter.print_table_fancy_grid(converter, text_file)
+            ResultPrinter.print_table_html(converter, export_filenames[ExportMode.HTML])
+            ResultPrinter.print_table_csv(converter, export_filenames[ExportMode.CSV])
+            ResultPrinter.print_table_fancy_grid(converter, export_filenames[ExportMode.TEXT])
 
 
 if __name__ == '__main__':
@@ -252,6 +316,8 @@ if __name__ == '__main__':
     profile = HISTORY_FILE_NAME + "-Profile1"
     src_data = entries_by_db_file[profile]
     all_fields = [f for f in Field]
+
+    # TODO move all date/time methods to helper class
 
     truncate_dict = {}
     for f in all_fields:
