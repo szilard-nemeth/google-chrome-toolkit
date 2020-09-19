@@ -89,7 +89,7 @@ class Setup:
                                                  "The date must be in ISO 8601 format, for example: YYYY-MM-DD")
 
         parser.add_argument('-f', '--db-files', dest="db_files", type=FileUtils.ensure_file_exists_and_readable,
-                            nargs='+', required=True)
+                            nargs='+', required=False)
 
         parser.add_argument('-t', '--truncate', dest="truncate", type=str, required=False, default=True,
                             help="Whether to truncate exported values when they are too long")
@@ -158,7 +158,9 @@ class DateRange:
 class Options:
     def __init__(self, args):
         self.export_mode = ExportMode(args.export_mode)
-        self.db_files = args.db_files
+        self.db_files = []
+        if args.db_files:
+            self.db_files.extend(args.db_files)
         self.search_db_files = args.search_db_files
         self.search_basedir = args.search_basedir
         self.verbose = args.verbose
