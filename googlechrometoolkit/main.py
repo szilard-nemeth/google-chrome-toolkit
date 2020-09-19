@@ -4,6 +4,8 @@ from googlechrometoolkit.database import ChromeDb
 from googlechrometoolkit.exporters import DataConverter, Field, RowStats, ResultPrinter, FieldType, Ordering, \
     ExportMode
 
+ALL_PROFILES = '*'
+
 FILE_PROFILE_SEP = '-'
 
 __author__ = 'Szilard Nemeth'
@@ -101,10 +103,11 @@ class Setup:
                             dest='search_basedir', default=DEFAULT_GOOGLE_CHROME_DIR,
                             required=False,
                             help='Basedir where this script looks for Google Chrome history DB files.')
-        parser.add_argument('-p', '--profile', default='*',
+        parser.add_argument('-p', '--profile', default=ALL_PROFILES,
                             dest='profile',
                             type=str, required=False,
-                            help="Which profile to use. Default value is: '*', which means export all profiles.")
+                            help="Which profile to use. "
+                                 "Default value is: '{}', which means export all profiles.".format(ALL_PROFILES))
 
         args = parser.parse_args()
         print("Args: " + str(args))
@@ -238,7 +241,7 @@ class GChromeHistoryExport:
                                        for file in found_db_files]
 
             LOG.info("Found DB files: \n%s", "\n".join(found_db_files))
-            if self.options.profile != '*' and self.options.profile.lower() not in self.available_profiles:
+            if self.options.profile != ALL_PROFILES and self.options.profile.lower() not in self.available_profiles:
                 raise ValueError("No {} found for profile: {}. "
                                  "Available profiles: {}"
                                  .format(GOOGLE_CHROME_HIST_DB_TEXT, self.options.profile, self.available_profiles))
@@ -358,7 +361,7 @@ def main():
     entries_by_db_file = exporter.query_history_entries()
 
     profile = exporter.options.profile
-    if profile == '*':
+    if profile == ALL_PROFILES:
         LOG.info("Exporting all %s...", GOOGLE_CHROME_HIST_DB_TEXT_PLURAL)
         for profile in exporter.available_profiles:
             exporter.export_by_profile(entries_by_db_file, profile)
