@@ -22,6 +22,9 @@ HISTORY_FILE_NAME = 'History'
 DEFAULT_GOOGLE_CHROME_DIR = expanduser("~") + '/Library/Application Support/Google/Chrome/'
 EXPORTED_DIR_NAME = "exported-chrome-db"
 
+DEFAULT_FROM_DATETIME = datetime.datetime(1601, 1, 1)
+DEFAULT_TO_DATETIME = datetime.datetime(2399, 1, 1)
+
 
 class ExportMode(Enum):
     TEXT = "text"
@@ -131,6 +134,23 @@ class DateRange:
         self.from_date = from_date
         self.to_date = to_date
 
+    @staticmethod
+    def create(from_param, to_param):
+        from_date = DEFAULT_FROM_DATETIME
+        if from_param:
+            from_date = datetime.datetime.combine(from_param, datetime.datetime.min.time())
+
+        to_date = DEFAULT_TO_DATETIME
+        if to_param:
+            to_date = datetime.datetime.combine(to_param, datetime.datetime.min.time())
+        return DateRange(from_date, to_date)
+
+    @staticmethod
+    def is_default_date_range(date_range):
+        if date_range.from_date > DEFAULT_FROM_DATETIME or date_range.to_date < datetime.datetime.now():
+            return False
+        return True
+
 
 @auto_str
 class Options:
@@ -141,8 +161,8 @@ class Options:
         self.search_basedir = args.search_basedir
         self.verbose = args.verbose
         self.truncate = args.truncate
-        self.date_range = self.create_date_range(args)
-        self.default_range = Options.is_default_date_range(self.date_range)
+        self.date_range = DateRange.create(args.from_date, args.to_date)
+        self.default_range = DateRange.is_default_date_range(self.date_range)
         self.db_result_filter = DbResultFilter(self.date_range)
 
         self.export_filename_postfix = ""
@@ -151,24 +171,6 @@ class Options:
             to_date_str = self.date_range.to_date.strftime("%Y%m%d")
             self.export_filename_postfix += "__{}_{}"\
                 .format(from_date_str, to_date_str)
-
-    @staticmethod
-    def is_default_date_range(date_range):
-        now = datetime.datetime.now()
-        if date_range.from_date > datetime.datetime(1601, 1, 1) or date_range.to_date < now:
-            return False
-        return True
-
-    @staticmethod
-    def create_date_range(args):
-        from_date = datetime.datetime(1601, 1, 1)
-        if args.from_date:
-            from_date = datetime.datetime.combine(args.from_date, datetime.datetime.min.time())
-
-        to_date = datetime.datetime(2399, 1, 1)
-        if args.to_date:
-            to_date = datetime.datetime.combine(args.to_date, datetime.datetime.min.time())
-        return DateRange(from_date, to_date)
 
     def __repr__(self):
         return str(self.__dict__)
