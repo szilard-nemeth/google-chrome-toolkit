@@ -3,12 +3,6 @@ from googlechrometoolkit.constants import GOOGLE_CHROME_HIST_DB_TEXT, GOOGLE_CHR
 from googlechrometoolkit.database import ChromeDb
 from googlechrometoolkit.exporters import DataConverter, Field, RowStats, ResultPrinter, FieldType, Ordering, \
     ExportMode
-
-ALL_PROFILES = '*'
-
-FILE_PROFILE_SEP = '-'
-
-__author__ = 'Szilard Nemeth'
 import argparse
 import sys
 import logging
@@ -17,15 +11,17 @@ from os.path import expanduser
 import time
 from logging.handlers import TimedRotatingFileHandler
 from enum import Enum
-
 from googlechrometoolkit.utils import auto_str, FileUtils, DateUtils
+
+__author__ = 'Szilard Nemeth'
 
 LOG = logging.getLogger(__name__)
 PROJECT_NAME = 'gchromehistoryexporter'
 HISTORY_FILE_NAME = 'History'
 DEFAULT_GOOGLE_CHROME_DIR = expanduser("~") + '/Library/Application Support/Google/Chrome/'
 EXPORTED_DIR_NAME = "exported-chrome-db"
-
+ALL_PROFILES = '*'
+FILE_PROFILE_SEP = '-'
 DEFAULT_FROM_DATETIME = DateUtils.get_datetime(1601, 1, 1)
 DEFAULT_TO_DATETIME = DateUtils.get_datetime(2399, 1, 1)
 
@@ -95,7 +91,7 @@ class Setup:
                             help="Whether to truncate exported values when they are too long")
 
         parser.add_argument('-s', '--search-db-files', action='store_true',
-                            dest='search_db_files', default=False,
+                            dest='is_search_db_files', default=False,
                             required=False,
                             help='Whether to search for DB files.')
         parser.add_argument('-sb', '--search-basedir',
@@ -161,7 +157,7 @@ class Options:
         self.db_files = []
         if args.db_files:
             self.db_files.extend(args.db_files)
-        self.search_db_files = args.search_db_files
+        self.is_search_db_files = args.is_search_db_files
         self.search_basedir = args.search_basedir
         self.verbose = args.verbose
         self.truncate = args.truncate
@@ -178,7 +174,7 @@ class Options:
                 .format(from_date_str, to_date_str)
 
     def validate(self):
-        if self.profile and not self.search_db_files:
+        if self.profile and not self.is_search_db_files:
             raise ValueError("Invalid configuration. "
                              "Search DB files (option: '--search-db-files' must be specified when profile is used!")
 
@@ -190,7 +186,6 @@ class GChromeHistoryExport:
     def __init__(self, options):
         # Options
         self.options = options
-        self.search_db_files = options.search_db_files
         self.available_profiles = None
 
         # Setup Directories
@@ -230,63 +225,75 @@ class GChromeHistoryExport:
 
         return prof.replace(" ", "")
 
-    def query_history_entries(self):
+    def process_databases(self):
         def _dst_filename_func(src_file, dest_dir):
             # Profile directory name may contains spaces, e.g. "Profile 1"
             profile: str = GChromeHistoryExport.get_profile_from_file_path(src_file)
             file_name = os.path.basename(src_file)
             return file_name + FILE_PROFILE_SEP + profile
 
-        if self.search_db_files:
-            found_db_files = FileUtils.search_files(self.search_basedir, HISTORY_FILE_NAME)
-            self.available_profiles = [GChromeHistoryExport.get_profile_from_file_path(file, to_lower=True)
-                                       for file in found_db_files]
-
-            LOG.info("Found DB files: \n%s", "\n".join(found_db_files))
-            if self.options.profile != ALL_PROFILES and self.options.profile.lower() not in self.available_profiles:
-                raise ValueError("No {} found for profile: {}. "
-                                 "Available profiles: {}"
-                                 .format(GOOGLE_CHROME_HIST_DB_TEXT, self.options.profile, self.available_profiles))
-
-            # EXAMPLE RESULTS
-            # /Users/<someuser>/Library/Application Support/Google/Chrome//Profile 1/History
-            # /Users/<someuser>/Library/Application Support/Google/Chrome//Default/History
-            # /Users/<someuser>/Library/Application Support/Google/Chrome//Profile 3/History
-            # /Users/<someuser>/Library/Application Support/Google/Chrome//System Profile/History
-            # /Users/<someuser>/Library/Application Support/Google/Chrome//Guest Profile/History
-            if not found_db_files:
-                raise ValueError("Cannot find any {} under directory: {}"
-                                 .format(GOOGLE_CHROME_HIST_DB_TEXT, self.search_basedir))
-
-            # Make a copy of each DB file as they might be locked by Chrome if running
-            msg = "Copying {}.".format(GOOGLE_CHROME_HIST_DB_TEXT) + "\n {} -> {}"
-            copied_db_files = [FileUtils.copy_file_to_dir(db, self.db_copies_dir, _dst_filename_func, msg_template=msg)
-                               for db in found_db_files]
-            file_sizes = FileUtils.get_file_sizes_in_dir(self.db_copies_dir)
-            LOG.info("Sizes of %s:\n%s", GOOGLE_CHROME_HIST_DB_TEXT, file_sizes)
-            self.options.db_files.extend(copied_db_files)
+        if self.options.is_search_db_files:
+            self.search_db_files(_dst_filename_func)
 
         result = {}
         for db_file in self.options.db_files:
             chrome_db = ChromeDb(db_file)
-            tables, columns = chrome_db.query_db_tables()
-            header = ["Row"] + columns
-            tabulated = ResultPrinter.print_table(
-                tables,
-                lambda row: row,  # Already a tuple
-                header=header,
-                print_result=False,
-                max_width=80,
-                max_width_separator=" ",
-            )
-            LOG.info("\n%s", tabulated)
-
-            profile = GChromeHistoryExport.get_profile_from_file_path(db_file, split_filename=False, to_lower=True)
-            key = profile.split(FILE_PROFILE_SEP)[1] if FILE_PROFILE_SEP in profile else profile
-            rows = chrome_db.query_history_entries()
-            filtered_rows = self.options.db_result_filter.filter_rows(rows)
+            self.print_db_tables(chrome_db)
+            key, filtered_rows = self.query_history_entries_from_db(chrome_db, db_file)
             result[key] = filtered_rows
         return result
+
+    def query_history_entries_from_db(self, chrome_db, db_file):
+        profile = self.get_profile_from_file_path(db_file, split_filename=False, to_lower=True)
+        key = profile.split(FILE_PROFILE_SEP)[1] if FILE_PROFILE_SEP in profile else profile
+        rows = chrome_db.query_history_entries()
+        filtered_rows = self.options.db_result_filter.filter_rows(rows)
+        return key, filtered_rows
+
+    @staticmethod
+    def print_db_tables(chrome_db):
+        tables, columns = chrome_db.query_db_tables()
+        header = ["Row"] + columns
+        tabulated = ResultPrinter.print_table(
+            tables,
+            lambda row: row,  # Already a tuple
+            header=header,
+            print_result=False,
+            max_width=80,
+            max_width_separator=" ",
+        )
+        LOG.info("\n%s", tabulated)
+
+    def search_db_files(self, _dst_filename_func):
+        """
+        EXAMPLE RESULTS
+        /Users/<someuser>/Library/Application Support/Google/Chrome//Profile 1/History
+        /Users/<someuser>/Library/Application Support/Google/Chrome//Default/History
+        /Users/<someuser>/Library/Application Support/Google/Chrome//Profile 3/History
+        /Users/<someuser>/Library/Application Support/Google/Chrome//System Profile/History
+        /Users/<someuser>/Library/Application Support/Google/Chrome//Guest Profile/History
+        :param _dst_filename_func:
+        :return:
+        """
+        found_db_files = FileUtils.search_files(self.search_basedir, HISTORY_FILE_NAME)
+        self.available_profiles = [self.get_profile_from_file_path(file, to_lower=True)
+                                   for file in found_db_files]
+        if not found_db_files:
+            raise ValueError("Cannot find any {} under directory: {}"
+                             .format(GOOGLE_CHROME_HIST_DB_TEXT, self.search_basedir))
+        LOG.info("Found DB files: \n%s", "\n".join(found_db_files))
+        if self.options.profile != ALL_PROFILES and self.options.profile.lower() not in self.available_profiles:
+            raise ValueError("No {} found for profile: {}. "
+                             "Available profiles: {}"
+                             .format(GOOGLE_CHROME_HIST_DB_TEXT, self.options.profile, self.available_profiles))
+
+        # Make a copy of each DB file as they might be locked by Chrome if running
+        msg = "Copying {}.".format(GOOGLE_CHROME_HIST_DB_TEXT) + "\n {} -> {}"
+        copied_db_files = [FileUtils.copy_file_to_dir(db, self.db_copies_dir, _dst_filename_func, msg_template=msg)
+                           for db in found_db_files]
+        file_sizes = FileUtils.get_file_sizes_in_dir(self.db_copies_dir)
+        LOG.info("Sizes of %s:\n%s", GOOGLE_CHROME_HIST_DB_TEXT, file_sizes)
+        self.options.db_files.extend(copied_db_files)
 
     def create_new_export_dir(self):
         dt_string = DateUtils.now_formatted("%Y%m%d_%H%M%S")
@@ -360,7 +367,7 @@ def main():
     Setup.init_logger(exporter.log_dir, console_debug=options.verbose)
 
     # Start exporting
-    entries_by_db_file = exporter.query_history_entries()
+    entries_by_db_file = exporter.process_databases()
 
     profile = exporter.options.profile
     if profile == ALL_PROFILES:
