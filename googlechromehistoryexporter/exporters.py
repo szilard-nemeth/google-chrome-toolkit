@@ -4,7 +4,6 @@ from enum import Enum
 import copy
 from tabulate import tabulate
 
-from googlechromehistoryexporter.main import ExportMode
 from googlechromehistoryexporter.utils import FileUtils, StringUtils
 
 HEADER_ROW_NUMBER = "Row #"
@@ -44,10 +43,11 @@ class Field(Enum):
 
 
 class DataConverter:
-    def __init__(self, src_data, headers, row_stats, truncate_dict, order_by, ordering,
+    def __init__(self, src_data, fields, row_stats, truncate_dict, order_by, ordering,
                  add_row_numbers=False):
         self.src_data = src_data
-        self.headers = headers
+        self.fields = fields
+        self.headers = [f.value[0] for f in fields]
         self.row_stats = row_stats
         self.truncate_dict = truncate_dict
         self.order_by = order_by.get_key()
@@ -73,13 +73,13 @@ class DataConverter:
             self.src_data = sorted(self.src_data, key=lambda data: getattr(data, self.order_by), reverse=reverse)
 
         if self.add_row_numbers:
-            self.headers.insert(0, HEADER_ROW_NUMBER)
+            self.fields.insert(0, HEADER_ROW_NUMBER)
 
         converted_data = []
         row_number = 1
         for d in self.src_data:
             row_dict = {header: getattr(d, header.get_key())
-                        for header in self.headers if header not in IGNORED_HEADERS}
+                        for header in self.fields if header not in IGNORED_HEADERS}
 
             # Convert all field values to str
             for k, v in row_dict.items():
@@ -96,11 +96,10 @@ class DataConverter:
                 self._modify_dict_value(row_dict, field, value, mod_val)
 
             # Make row
-            # TODO bug: Final output contains enum name instead of name, e.g. Field.URL
             row = []
             if self.add_row_numbers:
                 row.append(str(row_number))
-            for field in self.headers:
+            for field in self.fields:
                 if field not in IGNORED_HEADERS:
                     row.append(row_dict[field])
 
@@ -242,3 +241,10 @@ class RowStats:
     def _print(self, field_name):
         field_value = self.longest_fields[field_name]
         LOG.debug("Longest line is %d characters long. Field name: %s", len(field_value), field_name)
+
+
+class ExportMode(Enum):
+    TEXT = "text"
+    CSV = "csv"
+    HTML = "html"
+    ALL = "all"

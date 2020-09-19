@@ -1,7 +1,8 @@
 #!/usr/bin/python
 from googlechromehistoryexporter.constants import GOOGLE_CHROME_HIST_DB_TEXT
 from googlechromehistoryexporter.database import ChromeDb
-from googlechromehistoryexporter.exporters import DataConverter, Field, RowStats, ResultPrinter, FieldType, Ordering
+from googlechromehistoryexporter.exporters import DataConverter, Field, RowStats, ResultPrinter, FieldType, Ordering, \
+    ExportMode
 
 __author__ = 'Szilard Nemeth'
 import argparse
@@ -24,13 +25,6 @@ EXPORTED_DIR_NAME = "exported-chrome-db"
 
 DEFAULT_FROM_DATETIME = datetime.datetime(1601, 1, 1)
 DEFAULT_TO_DATETIME = datetime.datetime(2399, 1, 1)
-
-
-class ExportMode(Enum):
-    TEXT = "text"
-    CSV = "csv"
-    HTML = "html"
-    ALL = "all"
 
 
 class Extension(Enum):
@@ -74,7 +68,7 @@ class Setup:
 
         parser = argparse.ArgumentParser()
         # TODO make --db-files and --lookup-db-files mutually exclusive
-        # TODO add argument - profile: Only export one DB for a profile
+        # TODO add argument: profiles: Only export one DB for some profile(s)
 
         parser.add_argument('-v', '--verbose', action='store_true',
                             dest='verbose', default=None, required=False,
@@ -274,7 +268,7 @@ class GChromeHistoryExport:
         filename = export_dir + os.sep + profile
         if self.options.export_filename_postfix != "":
             filename += self.options.export_filename_postfix
-            filename += "." + ext_enum.value
+        filename += "." + ext_enum.value
         return filename
 
     def export(self, converter, profile):
