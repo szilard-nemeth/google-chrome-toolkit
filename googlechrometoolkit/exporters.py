@@ -1,10 +1,9 @@
-import datetime
 import logging
 from enum import Enum
 import copy
 from tabulate import tabulate
 
-from googlechrometoolkit.utils import FileUtils, StringUtils
+from googlechrometoolkit.utils import FileUtils, StringUtils, DateUtils
 
 HEADER_ROW_NUMBER = "Row #"
 IGNORED_HEADERS = {HEADER_ROW_NUMBER}
@@ -133,11 +132,11 @@ class DataConverter:
     def convert_datetime_field(self, field, value):
         truncate = self.truncate_dict[field]
         if truncate and field.get_type() == FieldType.DATETIME:
-            orig_date = value
-            date_obj = datetime.datetime.strptime(orig_date, '%Y-%m-%d %H:%M:%S.%f')
-            mod_date = date_obj.strftime("%Y-%m-%d")
-            LOG.debug("Truncated date: '%s', original value: %s, new value: %s", orig_date, orig_date, mod_date)
-            return mod_date
+            orig_date_str = value
+            date_obj = DateUtils.convert_to_datetime(orig_date_str, '%Y-%m-%d %H:%M:%S.%f')
+            mod_date_str = DateUtils.convert_datetime_to_str(date_obj, "%Y-%m-%d")
+            LOG.debug("Truncated date. Original value: %s, New value: %s", orig_date_str, mod_date_str)
+            return mod_date_str
         return value
 
 

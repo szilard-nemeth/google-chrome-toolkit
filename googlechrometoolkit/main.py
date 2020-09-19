@@ -12,12 +12,11 @@ import sys
 import logging
 import os
 from os.path import expanduser
-import datetime
 import time
 from logging.handlers import TimedRotatingFileHandler
 from enum import Enum
 
-from googlechrometoolkit.utils import auto_str, FileUtils
+from googlechrometoolkit.utils import auto_str, FileUtils, DateUtils
 
 LOG = logging.getLogger(__name__)
 PROJECT_NAME = 'gchromehistoryexporter'
@@ -25,8 +24,8 @@ HISTORY_FILE_NAME = 'History'
 DEFAULT_GOOGLE_CHROME_DIR = expanduser("~") + '/Library/Application Support/Google/Chrome/'
 EXPORTED_DIR_NAME = "exported-chrome-db"
 
-DEFAULT_FROM_DATETIME = datetime.datetime(1601, 1, 1)
-DEFAULT_TO_DATETIME = datetime.datetime(2399, 1, 1)
+DEFAULT_FROM_DATETIME = DateUtils.get_datetime(1601, 1, 1)
+DEFAULT_TO_DATETIME = DateUtils.get_datetime(2399, 1, 1)
 
 
 class Extension(Enum):
@@ -43,9 +42,7 @@ class Setup:
         logger.setLevel(logging.DEBUG)
 
         # create file handler which logs even debug messages
-        log_file_name = datetime.datetime.now().strftime(
-            (PROJECT_NAME + '-%Y_%m_%d_%H%M%S.log'))
-
+        log_file_name = DateUtils.now_formatted((PROJECT_NAME + '-%Y_%m_%d_%H%M%S.log'))
         fh = TimedRotatingFileHandler(os.path.join(log_dir, log_file_name), when='midnight')
         fh.suffix = '%Y_%m_%d.log'
         fh.setLevel(logging.DEBUG)
@@ -81,11 +78,11 @@ class Setup:
                             type=str, choices=[mode.value for mode in ExportMode], help='Export mode',
                             required=True)
 
-        parser.add_argument('--from-date', type=datetime.date.fromisoformat,
+        parser.add_argument('--from-date', type=DateUtils.from_iso_format,
                             dest="from_date", help="Query history entries from this date. "
                                                    "The date must be in ISO 8601 format, for example: YYYY-MM-DD")
 
-        parser.add_argument('--to-date', type=datetime.date.fromisoformat,
+        parser.add_argument('--to-date', type=DateUtils.from_iso_format,
                             dest="to_date", help="Query history entries until this date. "
                                                  "The date must be in ISO 8601 format, for example: YYYY-MM-DD")
 
@@ -140,16 +137,16 @@ class DateRange:
     def create(from_param, to_param):
         from_date = DEFAULT_FROM_DATETIME
         if from_param:
-            from_date = datetime.datetime.combine(from_param, datetime.datetime.min.time())
+            from_date = DateUtils.get_datetime_from_date(from_param, min_time=True)
 
         to_date = DEFAULT_TO_DATETIME
         if to_param:
-            to_date = datetime.datetime.combine(to_param, datetime.datetime.min.time())
+            to_date = DateUtils.get_datetime_from_date(to_param, min_time=True)
         return DateRange(from_date, to_date)
 
     @staticmethod
     def is_default_date_range(date_range):
-        if date_range.from_date > DEFAULT_FROM_DATETIME or date_range.to_date < datetime.datetime.now():
+        if date_range.from_date > DEFAULT_FROM_DATETIME or date_range.to_date < DateUtils.now():
             return False
         return True
 
@@ -287,8 +284,7 @@ class GChromeHistoryExport:
         return result
 
     def create_new_export_dir(self):
-        now = datetime.datetime.now()
-        dt_string = now.strftime("%Y%m%d_%H%M%S")
+        dt_string = DateUtils.now_formatted("%Y%m%d_%H%M%S")
         dirname = FileUtils.ensure_dir_created(os.path.join(self.exports_dir, EXPORTED_DIR_NAME + '-' + dt_string))
         return dirname
 

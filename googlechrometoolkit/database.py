@@ -1,9 +1,8 @@
-import datetime
 import logging
 import sqlite3
 
 from googlechrometoolkit.constants import GOOGLE_CHROME_HIST_DB_TEXT
-from googlechrometoolkit.utils import auto_str
+from googlechrometoolkit.utils import auto_str, DateUtils
 
 LOG = logging.getLogger(__name__)
 
@@ -43,7 +42,7 @@ class ChromeDb:
             :param microseconds:
             :return:
             """
-            return datetime.datetime(1601, 1, 1) + datetime.timedelta(microseconds=microseconds)
+            return DateUtils.add_microseconds_to_win_epoch(microseconds)
 
         c = self.conn.cursor()
         query = "select title, url, last_visit_time, visit_count from urls order by last_visit_time desc"
