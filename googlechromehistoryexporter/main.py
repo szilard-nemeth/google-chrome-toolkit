@@ -213,6 +213,27 @@ class GChromeHistoryExport:
         dirname = FileUtils.ensure_dir_created(os.path.join(self.exports_dir, EXPORTED_DIR_NAME + '-' + dt_string))
         return dirname
 
+    @staticmethod
+    def export(converter):
+        export_dir = exporter.create_new_export_dir()
+        html_file = export_dir + os.sep + profile + ".html"
+        csv_file = export_dir + os.sep + profile + ".csv"
+        text_file = export_dir + os.sep + profile + ".txt"
+        if exporter.options.export_mode == ExportMode.HTML:
+            LOG.info("Exporting DB to HTML file")
+            ResultPrinter.print_table_html(converter, html_file)
+        elif exporter.options.export_mode == ExportMode.CSV:
+            LOG.info("Exporting DB to CSV file")
+            ResultPrinter.print_table_csv(converter, csv_file)
+        elif exporter.options.export_mode == ExportMode.TEXT:
+            LOG.info("Exporting DB to text file")
+            ResultPrinter.print_table_fancy_grid(converter, text_file)
+        elif exporter.options.export_mode == ExportMode.ALL:
+            LOG.info("Exporting DB to ALL file formats")
+            ResultPrinter.print_table_html(converter, html_file)
+            ResultPrinter.print_table_csv(converter, csv_file)
+            ResultPrinter.print_table_fancy_grid(converter, text_file)
+
 
 if __name__ == '__main__':
     start_time = time.time()
@@ -247,24 +268,6 @@ if __name__ == '__main__':
                               Field.LAST_VISIT_TIME,
                               Ordering.DESC,
                               add_row_numbers=True)
-
-    export_dir = exporter.create_new_export_dir()
-    html_file = export_dir + os.sep + profile + ".html"
-    csv_file = export_dir + os.sep + profile + ".csv"
-    text_file = export_dir + os.sep + profile + ".txt"
-    if exporter.options.export_mode == ExportMode.HTML:
-        LOG.info("Exporting DB to HTML file")
-        ResultPrinter.print_table_html(converter, html_file)
-    elif exporter.options.export_mode == ExportMode.CSV:
-        LOG.info("Exporting DB to CSV file")
-        ResultPrinter.print_table_csv(converter, csv_file)
-    elif exporter.options.export_mode == ExportMode.TEXT:
-        LOG.info("Exporting DB to text file")
-        ResultPrinter.print_table_fancy_grid(converter, text_file)
-    elif exporter.options.export_mode == ExportMode.ALL:
-        LOG.info("Exporting DB to ALL file formats")
-        ResultPrinter.print_table_html(converter, html_file)
-        ResultPrinter.print_table_csv(converter, csv_file)
-        ResultPrinter.print_table_fancy_grid(converter, text_file)
+    exporter.export(converter)
 
     LOG.info("Execution of script took %d seconds", time.time() - start_time)
