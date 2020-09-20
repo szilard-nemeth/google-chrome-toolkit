@@ -1,5 +1,7 @@
 #!/usr/bin/python
+from pythoncommons.date_utils import DateUtils
 from pythoncommons.file_utils import FileUtils
+from pythoncommons.string_utils import auto_str
 
 from googlechrometoolkit.constants import GOOGLE_CHROME_HIST_DB_TEXT, GOOGLE_CHROME_HIST_DB_TEXT_PLURAL
 from googlechrometoolkit.database import ChromeDb
@@ -13,7 +15,6 @@ from os.path import expanduser
 import time
 from logging.handlers import TimedRotatingFileHandler
 from enum import Enum
-from googlechrometoolkit.utils import auto_str, DateUtils
 
 __author__ = 'Szilard Nemeth'
 
@@ -226,10 +227,8 @@ class GChromeHistoryExport:
             prof = os.path.dirname(src_file).split(os.sep)[-1]
         else:
             prof = os.path.split(src_file)[-1]
-
         if to_lower:
             prof = prof.lower()
-
         return prof.replace(" ", "")
 
     def process_databases(self):

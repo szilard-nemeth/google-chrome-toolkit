@@ -1,8 +1,10 @@
 import logging
 import sqlite3
 
+from pythoncommons.date_utils import DateUtils
+from pythoncommons.string_utils import auto_str
+
 from googlechrometoolkit.constants import GOOGLE_CHROME_HIST_DB_TEXT
-from googlechrometoolkit.utils import auto_str, DateUtils
 
 LOG = logging.getLogger(__name__)
 

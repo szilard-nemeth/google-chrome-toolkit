@@ -1,9 +1,11 @@
 import logging
 from enum import Enum
 import copy
+
+from pythoncommons.date_utils import DateUtils
+from pythoncommons.string_utils import StringUtils
 from tabulate import tabulate
 
-from googlechrometoolkit.utils import StringUtils, DateUtils
 from pythoncommons.file_utils import FileUtils
 
 HEADER_ROW_NUMBER = "Row #"
