@@ -1,7 +1,7 @@
 import datetime
 import os
 
-from googlechrometoolkit.utils import FileUtils
+from pythoncommons.file_utils import FileUtils
 
 PORT = "9222"
 ABSTRACT_SOCKET_NAME = "chrome_devtools_remote"

@@ -1,3 +1,3 @@
 tabulate
-humanize
 requests
+git+ssh://git@github.com/szilard-nemeth/python-commons.git

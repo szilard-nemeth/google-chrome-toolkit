@@ -3,7 +3,8 @@ from enum import Enum
 import copy
 from tabulate import tabulate
 
-from googlechrometoolkit.utils import FileUtils, StringUtils, DateUtils
+from googlechrometoolkit.utils import StringUtils, DateUtils
+from pythoncommons.file_utils import FileUtils
 
 HEADER_ROW_NUMBER = "Row #"
 IGNORED_HEADERS = {HEADER_ROW_NUMBER}

@@ -1,4 +1,6 @@
 #!/usr/bin/python
+from pythoncommons.file_utils import FileUtils
+
 from googlechrometoolkit.constants import GOOGLE_CHROME_HIST_DB_TEXT, GOOGLE_CHROME_HIST_DB_TEXT_PLURAL
 from googlechrometoolkit.database import ChromeDb
 from googlechrometoolkit.exporters import DataConverter, Field, RowStats, ResultPrinter, FieldType, Ordering, \
@@ -11,7 +13,7 @@ from os.path import expanduser
 import time
 from logging.handlers import TimedRotatingFileHandler
 from enum import Enum
-from googlechrometoolkit.utils import auto_str, FileUtils, DateUtils
+from googlechrometoolkit.utils import auto_str, DateUtils
 
 __author__ = 'Szilard Nemeth'
 
