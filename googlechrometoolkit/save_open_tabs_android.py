@@ -37,6 +37,9 @@ def main():
     urls = [d['url'] for d in ordered_data]
     # print("URLs: " + str(urls))
 
+    if not urls:
+        print("Opened pages could not be found. Exiting...")
+        return
     final_result = "\n".join(urls)
     filename = os.sep + "tmp" + os.sep + "webpages-phone-" + datetime.datetime.now().strftime('%Y%m%d_%H%M%S.txt')
     FileUtils.write_to_file(filename, final_result)
