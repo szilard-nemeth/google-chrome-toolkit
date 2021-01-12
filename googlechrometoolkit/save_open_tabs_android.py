@@ -2,6 +2,7 @@ import datetime
 import os
 
 from pythoncommons.file_utils import FileUtils
+from requests.exceptions import ConnectionError
 
 PORT = "9222"
 ABSTRACT_SOCKET_NAME = "chrome_devtools_remote"
@@ -13,7 +14,7 @@ def main():
     second_line = adb_out.split('\n', 1)[1]
     device_info_list = second_line.split("device")[1:]
     if not device_info_list:
-        print("No connected device found!")
+        print("Found no device connected!")
         exit(1)
     device_info = "".join([d.strip() for d in device_info_list])
     print("Detected connected device: " + device_info)
@@ -28,7 +29,14 @@ def main():
         raise ValueError("Cannot create port forwarding TCP socket on port %s!" % PORT)
     print("Forward list: " + forward_list)
 
-    data = load_json("http://localhost:{}/json/list".format(PORT))
+    data = None
+    try:
+        data = load_json("http://localhost:{}/json/list".format(PORT))
+    except ConnectionError as e:
+        print("Error while querying Chrome history. Make sure Google Chrome is launched on the device.")
+        print(e)
+        exit(1)
+
 
     # Order by ids
     ordered_data = sorted(data, key=lambda d: d['id'])
@@ -41,11 +49,13 @@ def main():
         print("Opened pages could not be found. Exiting...")
         return
     final_result = "\n".join(urls)
-    filename = os.sep + "tmp" + os.sep + "webpages-phone-" + datetime.datetime.now().strftime('%Y%m%d_%H%M%S.txt')
-    FileUtils.write_to_file(filename, final_result)
-    print("Pages saved to file: " + filename)
-    print("Opening file: " + filename)
-    os.system("subl " + filename)
+    file_name = "webpages-phone-" + datetime.datetime.now().strftime('%Y%m%d_%H%M%S.txt')
+    file_path = os.path.join("/tmp", file_name)
+    FileUtils.write_to_file(file_path, final_result)
+    print("Pages saved to file: " + file_path)
+    print("Please execute command: cp {} ~/Downloads/ && subl ~/Downloads/{}".format(file_path, file_name))
+    # print("Opening file: " + file_path)
+    # os.system("subl " + file_path)
 
 
 def load_json(url):
