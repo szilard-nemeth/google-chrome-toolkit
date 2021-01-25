@@ -1,3 +1,6 @@
 tabulate
 requests
 git+https://github.com/szilard-nemeth/python-commons.git
+
+#python-commons transitive dependencies
+humanize
