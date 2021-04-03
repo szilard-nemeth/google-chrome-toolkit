@@ -1,4 +1,5 @@
 .idea
+venv
 credentials.json
 token.pickle
 *.pyc
