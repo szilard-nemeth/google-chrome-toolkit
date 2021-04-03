@@ -11,6 +11,9 @@ ABSTRACT_SOCKET_NAME = "chrome_devtools_remote"
 def main():
     # checking for connected devices
     adb_out = os.popen("adb devices -l").read()
+    if not adb_out:
+        raise ValueError("Unexpected output from adb: '{}'".format(adb_out))
+
     second_line = adb_out.split('\n', 1)[1]
     device_info_list = second_line.split("device")[1:]
     if not device_info_list:
