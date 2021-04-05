@@ -299,7 +299,8 @@ class GChromeHistoryExport:
         msg = "Copying {}.".format(GOOGLE_CHROME_HIST_DB_TEXT) + "\n {} -> {}"
         copied_db_files = [FileUtils.copy_file_to_dir(db, self.db_copies_dir, _dst_filename_func, msg_template=msg)
                            for db in found_db_files]
-        file_sizes = FileUtils.get_file_sizes_in_dir(self.db_copies_dir)
+        file_sizes = FileUtils.get_formatted_file_sizes_in_dir(self.db_copies_dir,
+                                                               since=DateUtils.get_current_time_minus(minutes=1))
         LOG.info("Sizes of %s:\n%s", GOOGLE_CHROME_HIST_DB_TEXT, file_sizes)
         self.options.db_files.extend(copied_db_files)
 
