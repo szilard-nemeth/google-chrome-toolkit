@@ -316,8 +316,7 @@ class GChromeHistoryExport:
         filename += "." + ext_enum.value
         return filename
 
-    def export(self, converter, profile):
-        export_dir = self.create_new_export_dir()
+    def export(self, export_dir, converter, profile):
         html_filename = self.get_exported_filename(export_dir, profile, Extension.HTML)
         csv_filename = self.get_exported_filename(export_dir, profile, Extension.CSV)
         text_filename = self.get_exported_filename(export_dir, profile, Extension.TEXT)
@@ -346,7 +345,7 @@ class GChromeHistoryExport:
             LOG.info("Exporting DB to %s file", ext_enum.name)
             func(converter, filename)
 
-    def export_by_profile(self, entries_by_db_file, profile):
+    def export_by_profile(self, export_dir, entries_by_db_file, profile):
         src_data = entries_by_db_file[profile]
         all_fields = [f for f in Field]
         truncate_dict = {}
@@ -362,7 +361,7 @@ class GChromeHistoryExport:
                                   Field.LAST_VISIT_TIME,
                                   Ordering.DESC,
                                   add_row_numbers=True)
-        self.export(converter, profile)
+        self.export(export_dir, converter, profile)
 
 
 def main():
@@ -379,14 +378,15 @@ def main():
     entries_by_db_file = exporter.process_databases()
 
     profile = exporter.options.profile
+    export_dir = exporter.create_new_export_dir()
     if profile == ALL_PROFILES:
         LOG.info("Exporting all %s...", GOOGLE_CHROME_HIST_DB_TEXT_PLURAL)
         for profile in exporter.available_profiles:
-            exporter.export_by_profile(entries_by_db_file, profile)
+            exporter.export_by_profile(export_dir, entries_by_db_file, profile)
     else:
         # Single profile
         LOG.info("Exporting %s for single profile: %s", GOOGLE_CHROME_HIST_DB_TEXT, profile)
-        exporter.export_by_profile(entries_by_db_file, profile)
+        exporter.export_by_profile(export_dir, entries_by_db_file, profile)
 
     LOG.info("Execution of script took %d seconds", time.time() - start_time)
 
