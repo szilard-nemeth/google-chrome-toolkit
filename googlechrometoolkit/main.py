@@ -1,6 +1,7 @@
 #!/usr/bin/python
 from pythoncommons.date_utils import DateUtils
 from pythoncommons.file_utils import FileUtils
+from pythoncommons.project_utils import ProjectUtils
 from pythoncommons.string_utils import auto_str
 
 from googlechrometoolkit.constants import GOOGLE_CHROME_HIST_DB_TEXT, GOOGLE_CHROME_HIST_DB_TEXT_PLURAL
@@ -22,7 +23,7 @@ LOG = logging.getLogger(__name__)
 PROJECT_NAME = 'gchromehistoryexporter'
 HISTORY_FILE_NAME = 'History'
 DEFAULT_GOOGLE_CHROME_DIR = expanduser("~") + '/Library/Application Support/Google/Chrome/'
-EXPORTED_DIR_NAME = "exported-chrome-db"
+EXPORTED_DIR_NAME_PREFIX = "exported-chrome-db"
 ALL_PROFILES = '*'
 FILE_PROFILE_SEP = '-'
 DEFAULT_FROM_DATETIME = DateUtils.get_datetime(1601, 1, 1)
@@ -43,8 +44,8 @@ class Setup:
         logger.setLevel(logging.DEBUG)
 
         # create file handler which logs even debug messages
-        log_file_name = DateUtils.now_formatted((PROJECT_NAME + '-%Y_%m_%d_%H%M%S.log'))
-        fh = TimedRotatingFileHandler(os.path.join(log_dir, log_file_name), when='midnight')
+        log_file = ProjectUtils.get_default_log_file(PROJECT_NAME)
+        fh = TimedRotatingFileHandler(os.path.join(log_dir, log_file), when='midnight')
         fh.suffix = '%Y_%m_%d.log'
         fh.setLevel(logging.DEBUG)
 
@@ -192,34 +193,26 @@ class Options:
 
 class GChromeHistoryExport:
     def __init__(self, options):
-        # Options
         self.options = options
         self.available_profiles = None
-
-        # Setup Directories
-        self.project_out_root = None
-        self.log_dir = None
-        self.exports_dir = None
-        self.db_copies_dir = None
-        self.search_basedir = None
         self.setup_dirs()
 
     def setup_dirs(self):
-        home = expanduser("~")
-        self.project_out_root = os.path.join(home, PROJECT_NAME)
-        FileUtils.ensure_dir_created(self.project_out_root)
-
-        self.log_dir = os.path.join(self.project_out_root, 'logs')
-        FileUtils.ensure_dir_created(self.log_dir)
-
-        self.exports_dir = os.path.join(self.project_out_root, 'exports')
-        FileUtils.ensure_dir_created(self.exports_dir)
-
-        self.db_copies_dir = os.path.join(self.project_out_root, 'db_copies')
-        FileUtils.ensure_dir_created(self.db_copies_dir)
-
+        self.project_out_root = ProjectUtils.get_output_basedir(PROJECT_NAME)
         self.search_basedir = self.options.search_basedir
         FileUtils.ensure_dir_created(self.search_basedir)
+
+    @property
+    def log_dir(self):
+        return ProjectUtils.get_output_child_dir('logs')
+
+    @property
+    def exports_dir(self):
+        return ProjectUtils.get_output_child_dir('exports')
+
+    @property
+    def db_copies_dir(self):
+        return ProjectUtils.get_output_child_dir('db_copies')
 
     @staticmethod
     def get_profile_from_file_path(src_file, split_filename=True, to_lower=True) -> str:
@@ -306,7 +299,7 @@ class GChromeHistoryExport:
 
     def create_new_export_dir(self):
         dt_string = DateUtils.now_formatted("%Y%m%d_%H%M%S")
-        dirname = FileUtils.ensure_dir_created(os.path.join(self.exports_dir, EXPORTED_DIR_NAME + '-' + dt_string))
+        dirname = FileUtils.ensure_dir_created(os.path.join(self.exports_dir, f"{EXPORTED_DIR_NAME_PREFIX}-{dt_string}"))
         return dirname
 
     def get_exported_filename(self, export_dir, profile, ext_enum):
