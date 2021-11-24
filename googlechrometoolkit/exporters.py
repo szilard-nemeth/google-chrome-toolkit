@@ -143,12 +143,8 @@ class DataConverter:
         return value
 
 
+# TODO Migrate this to python-commons
 class ResultPrinter:
-    @staticmethod
-    def print_table_with_converter(converter):
-        converted_data = converter.convert(ExportMode.TEXT)
-        LOG.info("Printing result table: \n%s", tabulate(converted_data, converter.headers, tablefmt="fancy_grid"))
-
     @staticmethod
     def print_table(data, row_callback, header, print_result=True, max_width=None, max_width_separator=" "):
         converted_data = ResultPrinter._convert_list_data(
