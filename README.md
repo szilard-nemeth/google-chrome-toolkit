@@ -10,6 +10,24 @@ Currently, there are two use-cases:
 You need to have python 3.8 and pip installed.
 Run make from the project's root directory, all python dependencies required by the project will be installed.
 
+Additional steps
+
+Make sure to have proper PYTHONPATH, this needs to be in the path: 
+```
+<project-root-dir>/venv/lib/python3.8/site-packages/
+```
+
+Example
+```
+echo $PYTHONPATH
+/Users/snemeth/Library/Python/3.8/lib/python/site-packages/:/Users/snemeth/.asdf/installs/python/3.8.12/lib/python3.8/site-packages:/Users/snemeth/.linuxenv//scripts/python/:/Users/snemeth/development/my-repos/google-chrome-toolkit/venv/lib/python3.8/site-packages/
+```
+
+Launch with command from main dir: 
+```
+python3 main.py
+```
+
 
 ## Running the tests
 
