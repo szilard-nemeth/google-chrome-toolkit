@@ -3,3 +3,4 @@ venv
 credentials.json
 token.pickle
 *.pyc
+.DS_Store
