@@ -1,11 +1,13 @@
 #!/usr/bin/python
+from typing import List
+
 from pythoncommons.date_utils import DateUtils
 from pythoncommons.file_utils import FileUtils
 from pythoncommons.project_utils import ProjectUtils
 from pythoncommons.string_utils import auto_str
 
 from googlechrometoolkit.constants import GOOGLE_CHROME_HIST_DB_TEXT, GOOGLE_CHROME_HIST_DB_TEXT_PLURAL
-from googlechrometoolkit.database import ChromeDb
+from googlechrometoolkit.database import ChromeDb, ChromeHistoryEntry
 from googlechrometoolkit.exporters import DataConverter, Field, RowStats, ResultPrinter, FieldType, Ordering, \
     ExportMode
 import argparse
@@ -101,6 +103,9 @@ class Setup:
                             required=False,
                             help='Whether to search for DB files.')
 
+        parser.add_argument('-fm', '--filter-match',
+                            required=False, help='Filter results by match criteria')
+
         parser.add_argument('-sb', '--search-basedir',
                             type=FileUtils.ensure_dir_created,
                             dest='search_basedir', default=DEFAULT_GOOGLE_CHROME_DIR,
@@ -121,17 +126,34 @@ class Setup:
 
 
 class DbResultFilter:
-    def __init__(self, date_range):
+    def __init__(self, date_range, filter_match: str):
         self.date_range = date_range
+        self.filter_match = filter_match
 
     def _filter_by_date(self, row):
         if self.date_range.from_date <= row.last_visit_time <= self.date_range.to_date:
             return True
         return False
 
-    def filter_rows(self, rows):
-        LOG.info("Filtering by date range: %s", self.date_range)
-        return list(filter(lambda row: self._filter_by_date(row), rows))
+    def _filter_by_match(self, row):
+        if self.filter_match in row.url:
+            return True
+        return False
+
+    def filter_rows(self, rows: List[ChromeHistoryEntry]):
+        def get_source():
+            return filtered_rows if filtered_rows else rows
+
+        filtered_rows = None
+        if self.date_range:
+            LOG.info("Filtering by date range: %s", self.date_range)
+            filtered_rows = list(filter(lambda row: self._filter_by_date(row), get_source()))
+
+        if self.filter_match:
+            LOG.info("Filtering entries for match by: %s", self.filter_match)
+            filtered_rows = list(filter(lambda row: self._filter_by_match(row), get_source()))
+
+        return filtered_rows
 
 
 @auto_str
@@ -170,8 +192,9 @@ class Options:
         self.verbose = args.verbose
         self.truncate = args.truncate
         self.date_range = DateRange.create(args.from_date, args.to_date)
+        self.filter_match = args.filter_match
         self.default_range = DateRange.is_default_date_range(self.date_range)
-        self.db_result_filter = DbResultFilter(self.date_range)
+        self.db_result_filter = DbResultFilter(self.date_range, self.filter_match)
         self.profile = args.profile
         self.is_list_db_tables = args.list_db_tables
 
@@ -246,7 +269,7 @@ class GChromeHistoryExport:
     def query_history_entries_from_db(self, chrome_db, db_file):
         profile = self.get_profile_from_file_path(db_file, split_filename=False, to_lower=True)
         key = profile.split(FILE_PROFILE_SEP)[1] if FILE_PROFILE_SEP in profile else profile
-        rows = chrome_db.query_history_entries()
+        rows: List[ChromeHistoryEntry] = chrome_db.query_history_entries()
         filtered_rows = self.options.db_result_filter.filter_rows(rows)
         return key, filtered_rows
 

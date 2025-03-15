@@ -1,5 +1,6 @@
 import logging
 import sqlite3
+from typing import List
 
 from pythoncommons.date_utils import DateUtils
 from pythoncommons.string_utils import auto_str
@@ -34,7 +35,7 @@ class ChromeDb:
         result = cursor.fetchall()
         return result, columns
 
-    def query_history_entries(self):
+    def query_history_entries(self) -> List[ChromeHistoryEntry]:
         def _convert_chrome_datetime(microseconds):
             """
             Since Google Chrome stores the last visit time with microseconds passed since
