@@ -366,10 +366,15 @@ class GChromeHistoryExport:
         all_fields = [f for f in Field]
         truncate_config = TruncateConfig()
         for f in all_fields:
-            if not self.options.truncate or f.get_type() in {FieldType.DATETIME}:
-                truncate_config.add_field(f, False)
-            else:
-                truncate_config.add_field(f, True)
+            modes = [ExportMode.TEXT, ExportMode.HTML]
+            for mode in modes:
+                if not self.options.truncate or f.get_type() in {FieldType.DATETIME}:
+                    truncate_config.add_field(f, False, mode)
+                else:
+                    truncate_config.add_field(f, True, mode)
+
+            # Never truncate in CSV files
+            truncate_config.add_field(f, False, ExportMode.CSV)
         converter = DataConverter(src_data,
                                   [Field.TITLE, Field.URL, Field.LAST_VISIT_TIME, Field.VISIT_COUNT],
                                   RowStats(all_fields, track_unique=[Field.URL]),
