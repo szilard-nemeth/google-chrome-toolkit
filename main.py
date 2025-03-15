@@ -9,7 +9,7 @@ from pythoncommons.string_utils import auto_str
 from googlechrometoolkit.constants import GOOGLE_CHROME_HIST_DB_TEXT, GOOGLE_CHROME_HIST_DB_TEXT_PLURAL
 from googlechrometoolkit.database import ChromeDb, ChromeHistoryEntry
 from googlechrometoolkit.exporters import DataConverter, Field, RowStats, ResultPrinter, FieldType, Ordering, \
-    ExportMode
+    ExportMode, TruncateConfig
 import argparse
 import sys
 import logging
@@ -364,16 +364,16 @@ class GChromeHistoryExport:
     def export_by_profile(self, export_dir, entries_by_db_file, profile):
         src_data = entries_by_db_file[profile]
         all_fields = [f for f in Field]
-        truncate_dict = {}
+        truncate_config = TruncateConfig()
         for f in all_fields:
             if not self.options.truncate or f.get_type() in {FieldType.DATETIME}:
-                truncate_dict[f] = False
+                truncate_config.add_field(f, False)
             else:
-                truncate_dict[f] = True
+                truncate_config.add_field(f, True)
         converter = DataConverter(src_data,
                                   [Field.TITLE, Field.URL, Field.LAST_VISIT_TIME, Field.VISIT_COUNT],
                                   RowStats(all_fields, track_unique=[Field.URL]),
-                                  truncate_dict,
+                                  truncate_config,
                                   Field.LAST_VISIT_TIME,
                                   Ordering.DESC,
                                   add_row_numbers=True)

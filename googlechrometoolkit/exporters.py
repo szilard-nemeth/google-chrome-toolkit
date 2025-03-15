@@ -1,6 +1,7 @@
 import logging
 from enum import Enum
 import copy
+from typing import Dict
 
 from pythoncommons.date_utils import DateUtils
 from pythoncommons.string_utils import StringUtils
@@ -51,14 +52,27 @@ class Field(Enum):
         return self.value[3]
 
 
+class TruncateConfig:
+    def __init__(self):
+        self._d: Dict[Field, bool] = {}
+
+    def add_field(self, field: Field, truncate: bool):
+        if field in self._d:
+            raise ValueError("Field '{}' is already added to truncate config!".format(field))
+        self._d[field] = truncate
+
+    def get(self, field: Field):
+        return self._d[field]
+
+
 class DataConverter:
-    def __init__(self, src_data, fields, row_stats, truncate_dict, order_by, ordering,
+    def __init__(self, src_data, fields, row_stats, truncate_config: TruncateConfig, order_by, ordering,
                  add_row_numbers=False):
         self.src_data = src_data
         self.fields = fields
         self.headers = [f.value[0] for f in fields]
         self.row_stats = row_stats
-        self.truncate_dict = truncate_dict
+        self.truncate_config: TruncateConfig = truncate_config
         self.order_by = order_by.get_key()
         self.ordering = ordering
         self.add_row_numbers = add_row_numbers
@@ -118,8 +132,8 @@ class DataConverter:
         self.row_stats.print_stats()
         return converted_data
 
-    def convert_str_field(self, field, value, export_mode):
-        truncate = self.truncate_dict[field]
+    def convert_str_field(self, field: Field, value, export_mode):
+        truncate = self.truncate_config.get(field)
         max_len = field.get_max_length()
         allowed_field_types = {FieldType.SIMPLE_STR, FieldType.URL}
         if truncate and field.get_type() in allowed_field_types and len(value) > max_len:
@@ -132,8 +146,8 @@ class DataConverter:
             value = self._make_html_link(value)
         return value
 
-    def convert_datetime_field(self, field, value):
-        truncate = self.truncate_dict[field]
+    def convert_datetime_field(self, field: Field, value):
+        truncate = self.truncate_config.get(field)
         if truncate and field.get_type() == FieldType.DATETIME:
             orig_date_str = value
             date_obj = DateUtils.convert_to_datetime(orig_date_str, '%Y-%m-%d %H:%M:%S.%f')
