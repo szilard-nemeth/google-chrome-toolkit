@@ -74,19 +74,19 @@ class DataConverter:
 
     def convert(self, export_mode):
         # Make a copy of the data as other export methods may use the same data objects afterwards!
-        self.src_data = copy.deepcopy(self.src_data)
+        data = copy.deepcopy(self.src_data)
 
         if self.order_by:
             LOG.info("Ordering data by field '%s', ordering: %s", self.order_by, self.ordering)
             reverse = False if self.ordering == Ordering.ASC else True
-            self.src_data = sorted(self.src_data, key=lambda data: getattr(data, self.order_by), reverse=reverse)
+            data = sorted(data, key=lambda data: getattr(data, self.order_by), reverse=reverse)
 
         if self.add_row_numbers:
             self.fields.insert(0, HEADER_ROW_NUMBER)
 
         converted_data = []
         row_number = 1
-        for d in self.src_data:
+        for d in data:
             row_dict = {header: getattr(d, header.get_key())
                         for header in self.fields if header not in IGNORED_HEADERS}
 
