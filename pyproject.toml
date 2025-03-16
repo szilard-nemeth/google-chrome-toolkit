@@ -32,8 +32,8 @@ include = [
 
 [tool.poetry.dependencies]
 python = "^3.8.12"
-python-common-lib = "1.0.8"
-google-api-wrapper2 = "1.0.7"
+python-common-lib = "1.0.11"
+google-api-wrapper2 = "1.0.12"
 requests = "*"
 
 
